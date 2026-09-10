@@ -162,3 +162,8 @@ dist
 
 # GdUnit4 test reports
 reports/
+
+# Local-only planning docs
+PLAN.md
+ROADMAP.md
+.github/issues/
