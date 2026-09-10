@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="MutableStatResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scratch/spike/test/fixtures/mutable_stat_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_health = 100

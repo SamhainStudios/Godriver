@@ -1,0 +1,44 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scratch/spike/scripts/sub_viewport_fixture.gd" id="1"]
+
+[node name="SubFixture" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="Container" type="SubViewportContainer" parent="."]
+layout_mode = 1
+offset_left = 50.0
+offset_top = 50.0
+offset_right = 450.0
+offset_bottom = 450.0
+stretch = true
+
+[node name="Sub" type="SubViewport" parent="Container"]
+size = Vector2i(200, 200)
+
+[node name="Inner" type="Control" parent="Container/Sub"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Button" type="Button" parent="Container/Sub/Inner"]
+layout_mode = 1
+offset_left = 50.0
+offset_top = 80.0
+offset_right = 150.0
+offset_bottom = 120.0
+text = "Inner"
+
+[node name="Label" type="Label" parent="Container/Sub/Inner"]
+layout_mode = 1
+offset_left = 50.0
+offset_top = 130.0
+offset_right = 250.0
+offset_bottom = 160.0
+text = "idle"
