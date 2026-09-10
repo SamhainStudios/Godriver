@@ -6,9 +6,15 @@
     "core"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --allowJs --checkJs core/test/types.test.ts"
+    "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --allowJs --checkJs core/test/types.test.ts",
+    "test:unit": "node --test core/test/client.test.js core/test/interactions.test.js",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^22.20.2",
     "typescript": "^7.0.2"
   }

@@ -10,6 +10,21 @@
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/core"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "undici": "^7.16.0"
   },
