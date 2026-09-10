@@ -1,4 +1,4 @@
-# Issue Backlog (godot-test-driver)
+# Issue Backlog (godriver)
 
 File-based backlog, the source of truth for implementation. Pattern borrowed from the WrongVersion project: briefs live here as numbered files, get seeded to GitHub when work starts, and stay readable without a GitHub login.
 

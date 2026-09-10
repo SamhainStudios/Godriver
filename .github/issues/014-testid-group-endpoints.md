@@ -49,7 +49,7 @@ test_id resolution and group queries as production endpoints with pagination and
 ## Files expected to change
 
 ```
-addons/godot-test-driver/handlers/node_handler.gd
+addons/godriver/handlers/node_handler.gd
 ```
 
 ## References

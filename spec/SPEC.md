@@ -1,7 +1,7 @@
-# Godot Test Driver — HTTP API Specification
+# Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 6)
-Status: Sprint 1 deliverable — §1–§4, §6–§9 decided; §5 endpoint reference filled during Sprint 1
+Version: 0.1 (draft, rev 7)
+Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
        implements against this document and nothing else.
 
@@ -12,7 +12,7 @@ Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 - **Transport**: HTTP/1.1 over TCP. Server runs inside the game process.
 - **Host binding**: `127.0.0.1` only. The server never binds to `0.0.0.0`.
 - **Base URL**: `http://127.0.0.1:9090`
-- **Port override**: `--test-driver-port=N` (CLI user arg) or project setting `godot_test_driver/port`.
+- **Port override**: `--test-driver-port=N` (CLI user arg) or project setting `godriver/port`.
 - **Port collisions**: 9090 is also the default runtime port of tugcantopaloglu/godot-mcp's interaction server and Smalldy/godot-bridge. If either addon is installed in the same project, override via `--test-driver-port=N`.
 - **Ephemeral port**: `--test-driver-port=0` → OS-assigned; actual port printed to stdout as `GODRIVER_PORT=<n>` for client discovery.
 - **Activation**: server dormant unless `--test-driver` is present in `OS.get_cmdline_user_args()`. Dormant = zero listeners, zero per-frame cost.
@@ -118,27 +118,215 @@ Resets the game to a clean baseline for scenario isolation.
 - **Async-initialization caveat**: `is_node_ready()` returns `true` as soon as `_ready()` has *started and returned synchronously* — a scene that kicks off async work inside `_ready()` (e.g. `await get_tree().create_timer(...)`, deferred sub-resource loading) reports ready before that work concludes. `/reset` cannot detect this (there is no engine-level "fully initialized" signal). Games with async init SHOULD expose a readiness signal testable via `/signal/wait`; document this in client docs.
 - Status codes: `200`, `409 STATE_AUTOLOAD_MISSING` (reset proceeds without state step), `504 SCENE_READY_TIMEOUT`, `500 INTERNAL`
 
-For each endpoint:
+### 5.1 Health & metadata
 
-- Method + path
-- Path / query / body params (name, type, required, default)
-- Response schema
-- Status codes it can return
-- Copy-pasteable `curl` example
-- One-line timing note (sync vs fire-and-forget)
+#### `GET /health`
 
-Sections:
-- 5.0 Lifecycle (`/reset`)
-- 5.1 Health & metadata (`/health` — returns `godot_version` (e.g. `"4.7.2"`) and `spec_version` for client compatibility checks; `/scene/current`, `/state`, `/input/map`, `/assets/loaded`, `/ui/layout/<path>` — layout bounds use `get_global_rect()` and are offset-transform-aware on 4.7+ via `Control.offset_transform_*`)
-- 5.2 Node queries (`/node/<path>`, `/node?test_id=`, `/nodes?group=` — **paginated**: `?limit=100&offset=0`, defaults `limit=100` max `1000`; response carries `meta.total` so clients can page through large scenes without OOM/timeouts, `/node/<path>/property/<name>`)
-- 5.3 Input (`/input/click`, `/input/type`, `/input/key`, `/input/drag`, `/input/gamepad`)
-- 5.4 Scene (`/scene/load`)
-- 5.5 Signals (`/signal/watch`, `/signal/poll`, `/signal/wait`)
-- 5.6 Assertions (`/assert/visible`, `/assert/enabled`, `/assert/property`)
-- 5.7 Waits (`/wait`, `/wait/frames` — implementation note: `/wait/frames` awaits `get_tree().process_frame` N times; NEVER `Timer`s, `SceneTreeTimer`s, or thread sleeps, which are subject to `time_scale`/pause and would break the wait's own semantics. `process_frame` is also the pause-safe choice: the signal keeps ticking while `get_tree().paused = true` (the dispatcher runs with `PROCESS_MODE_ALWAYS`), whereas reliance on `physics_frame` under pause is not guaranteed across engine versions — frame-wait operations MUST advance via `process_frame` only)
-- 5.8 State (`/state/set`, `/state/schema`) — **⚠ see §8**
-- 5.9 Determinism (`/dev/seed`, `/dev/time_scale`, `/dev/pause`, `/dev/save/load`)
-- 5.10 Screenshots (`/screenshot/capture`, `/screenshot/region`) — **⚠ requires an active rendering context; see §5.10 note**
+Liveness + version handshake. Clients call this first; `spec_version` gates feature detection.
+
+- Params: none
+- Response schema:
+
+```json
+{ "ok": true, "data": { "status": "ok", "godot_version": "4.7.2", "spec_version": "0.1" } }
+```
+
+- `godot_version` = `Engine.get_version_info()` string form (e.g. `"4.7.2"`). `spec_version` = this document's version (Appendix C).
+- Status codes: `200`
+- Timing: synchronous (§6 — handled on the next main-loop tick).
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/health
+```
+
+#### `GET /scene/current`
+
+The currently active scene.
+
+- Params: none
+- Response schema:
+
+```json
+{ "ok": true, "data": { "scene": "res://scenes/main.tscn", "node": "/root/Main" } }
+```
+
+- `scene` = resource path of the current scene (`get_tree().current_scene.scene_file_path`); `node` = absolute node path of the current-scene instance.
+- Status codes: `200`, `500 INTERNAL` (no current scene — e.g. before the first scene loads)
+- Timing: synchronous.
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/scene/current
+```
+
+#### `GET /input/map`
+
+The registered `InputMap` actions — the contract clients need to drive `/input/key`/`/input/gamepad` by action name (Phase 2) and to assert action existence.
+
+- Params: none
+- Response schema:
+
+```json
+{ "ok": true, "data": { "actions": [
+  { "name": "jump", "events": [
+    { "type": "key", "keycode": 87, "physical_keycode": 0, "device": 16 }
+  ] },
+  { "name": "fire", "events": [
+    { "type": "mouse_button", "button_index": 1, "device": 32 },
+    { "type": "joypad_button", "button_index": 0, "device": 0 }
+  ] }
+] } }
+```
+
+- Event shapes: `type` is the snake-cased `InputEvent` subclass. Well-known fields are extracted when present: `key` → `keycode`, `physical_keycode`, `device`; `mouse_button` → `button_index`, `device`; `joypad_button` → `button_index`, `device`; `joypad_motion` → `axis`, `axis_value`, `device`. Any other event type serializes as `{"type": "<class>"}` only (extensible additively; clients must tolerate unknown fields).
+- `device` values follow §6 (4.7 constants: keyboard `16`, mouse `32`).
+- Status codes: `200`
+- Timing: synchronous.
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/input/map
+```
+
+#### `GET /ui/layout/<path>`
+
+**Documented with its implementing brief (Phase 2).** Contract note frozen here: layout bounds are the node's `get_global_rect()` returned as a flat §4 `Rect2` (`{x,y,w,h}`), and are offset-transform-aware on 4.7+ via `Control.offset_transform_*`.
+
+### 5.2 Node queries
+
+All node-query endpoints are synchronous reads dispatched to the main thread (§6). Node summaries share one shape:
+
+```json
+{ "path": "/root/Main/Button", "name": "Button", "type": "Button", "test_id": "start_button", "child_count": 0, "children": [], "script": null }
+```
+
+- `type` = `node.get_class()`. `test_id` = the node's `test_id` metadata (§7) or `null`. `children` = child names in tree order. `script` = resource path of the attached script or `null`.
+
+#### `GET /node/<path>`
+
+Node summary by absolute path.
+
+- Params: `path` (URL path segment; absolute, starts at `/root`)
+- Response schema: envelope `data` = node summary (above)
+- Status codes: `200`, `400 BAD_PATH` (malformed path syntax), `404 NODE_NOT_FOUND`
+- Timing: synchronous.
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/node/root/Main/Button
+```
+
+#### `GET /node/<path>/property/<name>`
+
+A single property value, serialized per §4.
+
+- Params: `path` (URL segment), `name` (URL segment)
+- Response schema:
+
+```json
+{ "ok": true, "data": { "name": "text", "type": "String", "value": "pressed" } }
+```
+
+- `type` = the Variant type name of the value as serialized (e.g. `"String"`, `"Vector2"`, `"int"`); `value` per §4 mapping. Property present with value `null` → `200 {"value": null}` (§4).
+- Status codes: `200`, `400 BAD_PATH`, `404 NODE_NOT_FOUND`, `404 PROPERTY_NOT_FOUND` (node exists, property does not — includes engine-private properties), `400 UNSUPPORTED_TYPE` (value type not in §4, e.g. Callable)
+- Timing: synchronous.
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/node/root/Main/Button/property/text
+```
+
+#### `GET /node?test_id=<id>`
+
+Resolve a single node by `test_id` metadata (§7 rules: whole-tree scope, error-on-ambiguity).
+
+- Params: `test_id` (query, required, string)
+- Response schema:
+
+```json
+{ "ok": true, "data": { "test_id": "start_button", "path": "/root/Main/Button" } }
+```
+
+- Status codes: `200`, `400 MISSING_PARAM` (no `test_id` given), `404 TEST_ID_NOT_FOUND` (zero matches), `409 AMBIGUOUS_TEST_ID` (multiple matches; `details.matches` = array of paths)
+- Timing: synchronous. Note: resolution is an O(nodes) whole-tree scan — fine for typical scenes; large-scene cost is a known consideration for the `/nodes` pagination design.
+- curl:
+
+```bash
+curl "http://127.0.0.1:9090/node?test_id=start_button"
+```
+
+#### `GET /nodes?group=<name>`
+
+All nodes in a `SceneTree` group — collections are exempt from ambiguity errors (§7); an empty group is a `200` with zero nodes, not a `404`.
+
+- Params: `group` (query, required, string); `limit` (query, optional, default `100`, max `1000`); `offset` (query, optional, default `0`)
+- Response schema:
+
+```json
+{ "ok": true, "data": { "nodes": [
+  { "path": "/root/Main/Enemy1", "name": "Enemy1", "type": "Area2D", "test_id": null, "child_count": 2, "children": ["Sprite", "Collision"], "script": "res://enemy.gd" }
+], "meta": { "total": 27, "limit": 100, "offset": 0 } } }
+```
+
+- `meta.total` = full match count before pagination; page with `?limit=&offset=` until `offset >= total`.
+- Status codes: `200`, `400 MISSING_PARAM` (no `group` given), `400 TYPE_MISMATCH` (out-of-range `limit`; `details.expected: "1..1000"`)
+- Timing: synchronous.
+- curl:
+
+```bash
+curl "http://127.0.0.1:9090/nodes?group=enemies&limit=100&offset=0"
+```
+
+### 5.3 Input (`/input/click`, `/input/type`, `/input/key`, `/input/drag`, `/input/gamepad`)
+
+**Documented with their implementing briefs (Phase 2).** Contract prerequisites already frozen: §6 timing/routing, §4 shapes, Appendix A codes.
+
+### 5.4 Scene (`/scene/load`)
+
+**Documented with its implementing brief (Phase 2).**
+
+### 5.5 Signals (`/signal/watch`, `/signal/poll`, `/signal/wait`)
+
+**Documented with their implementing briefs (Phase 2).** §6.1 concurrency contract applies.
+
+### 5.6 Assertions (`/assert/visible`, `/assert/enabled`, `/assert/property`)
+
+**Documented with their implementing briefs (Phase 3).**
+
+### 5.7 Waits (`/wait`, `/wait/frames`)
+
+**Documented with their implementing briefs (Phase 2).** Implementation note frozen here: `/wait/frames` awaits `get_tree().process_frame` N times; NEVER `Timer`s, `SceneTreeTimer`s, or thread sleeps, which are subject to `time_scale`/pause and would break the wait's own semantics. `process_frame` is also the pause-safe choice: the signal keeps ticking while `get_tree().paused = true` (the dispatcher runs with `PROCESS_MODE_ALWAYS`), whereas reliance on `physics_frame` under pause is not guaranteed across engine versions — frame-wait operations MUST advance via `process_frame` only.
+
+### 5.8 State
+
+#### `GET /state`
+
+Read the configured state autoload's script-declared properties (§8 discovery: project setting `godriver/state_autoload`, default `GameState`).
+
+- Params: none (the optional `target` expansion is part of `/state/set` + `/state/schema`, Phase 3)
+- Response schema:
+
+```json
+{ "ok": true, "data": { "autoload": "GameState", "values": { "player_life": 3, "level_name": "intro" } } }
+```
+
+- `values` = flat map of script-declared variables (`SCRIPT_VARIABLES`-style members exposed via `get_property_list()` with `usage` script-flags) → current values serialized per §4. Engine built-ins are excluded.
+- Status codes: `200`, `409 STATE_AUTOLOAD_MISSING` (no state autoload configured; `details` carries the configuration hint)
+- Timing: synchronous.
+- curl:
+
+```bash
+curl http://127.0.0.1:9090/state
+```
+
+#### `POST /state/set`, `GET /state/schema`
+
+**Documented with their implementing briefs (Phase 2/3).** Coercion rules, null-write semantics, and target expansion are frozen in §8.
+
+### 5.9 Determinism (`/dev/seed`, `/dev/time_scale`, `/dev/pause`, `/dev/save/load`)
+
+**Documented with their implementing briefs (Phase 3).** Semantics frozen in §9.
 
 ### 5.10 Screenshots — rendering-context requirement
 
@@ -185,7 +373,7 @@ Sections:
 
 - `/signal/wait` blocks **only its own connection**, never the server.
 - Server MUST sustain **≥4 concurrent connections** (blocked waits included). **Sprint 0 Spike A validates this against vendored godottpd**; the hand-rolled fallback must meet the same bar.
-- Limit exceeded → `503 SERVER_BUSY` with `Retry-After` header. The cap applies to **concurrent blocked waits** (not to all request threads); the limit is configurable via project setting `godot_test_driver/max_blocked_waits` (default 8), and the ≥4-connection guarantee always holds.
+- Limit exceeded → `503 SERVER_BUSY` with `Retry-After` header. The cap applies to **concurrent blocked waits** (not to all request threads); the limit is configurable via project setting `godriver/max_blocked_waits` (default 8), and the ≥4-connection guarantee always holds.
 - Clients using pipelining/keep-alive: issue blocking calls on a dedicated connection (standard HTTP connection pooling handles this).
 - **Client-side pool sizing (JS client)**: long-polling holds connections open for up to the endpoint timeout. The JS client MUST size its HTTP agent pool so `maxSockets ≥ max_blocked_waits` (plus headroom for non-blocking calls) — otherwise parallel CI workers starve the pool waiting for blocked waits. **Set `maxSockets` explicitly regardless of library defaults**: Node's plain `http.Agent` defaults to `Infinity`, but common tooling (custom agents, Axios instances, Undici pools) enforces default pools as low as 4–6 connections — never rely on the default. This is the mitigation until SSE streaming (v0.2) removes held connections entirely.
 - Blocked waits cap at the endpoint timeout (30s default), then return `200 {"data": {"signaled": false, "timed_out": true}}` — timeout is a normal outcome, not an error.
@@ -202,7 +390,7 @@ Sections:
 
 **⚠ Divergence-prone. Coercion rules frozen here.**
 
-- Discovery: project setting `godot_test_driver/state_autoload`, default name `GameState`. Looked up among autoloads at server start.
+- Discovery: project setting `godriver/state_autoload`, default name `GameState`. Looked up among autoloads at server start.
 - **Target expansion**: `/state/set` and `/state/schema` accept an optional `"target"` param. Default (no target) = the configured state autoload. A target may be a node path (`/root/Main/InventoryManager`) or a Resource path (`res://data/player_stats.tres`). Invalid/unresolvable target → `404 TARGET_NOT_FOUND`. `409 STATE_AUTOLOAD_MISSING` applies only when no target is given and no state autoload is configured.
 - **⚠ Resource-target cache semantics**: writing to a `res://` target mutates the **in-memory `ResourceLoader` cache entry**, not the disk file — and the cache persists across `/reset` (see §5.0). Mutating a disk-backed `.tres` therefore leaks across scenarios. Prefer node targets, or `duplicate()` the resource before mutation (§5.0 rules).
 - Absent autoload (no target given) → `/state/set` and `/state/schema` return `409 STATE_AUTOLOAD_MISSING` with a configuration hint in `details`. All other endpoints unaffected.
@@ -257,6 +445,7 @@ Stable machine-readable codes. Never repurpose a code.
 | ---- | ---- | ------- |
 | BAD_JSON | 400 | body is not valid JSON |
 | BAD_PATH | 400 | node path malformed |
+| MISSING_PARAM | 400 | required query/body parameter absent |
 | UNKNOWN_KEY | 400 | state key not on autoload |
 | TYPE_MISMATCH | 400 | coercion failed |
 | NULL_NOT_ALLOWED | 400 | null write rejected |
@@ -296,9 +485,10 @@ curl -X POST http://127.0.0.1:9090/assert/visible \
 Breaking vs additive changes. Client implementations pin a spec version.
 
 - **0.1 (draft)** — initial contract. §1–§4, §6–§9 decided; §5 endpoint reference = Sprint 1 work.
-- **0.1 (draft, rev 2)** — added §5.0 `/reset` lifecycle endpoint; §5.10 headless rendering contract (`400 HEADLESS_RENDERING_DISABLED`, xvfb/llvmpipe CI requirement, driver-parity rule); §6 timing clarified (handling = next main-loop tick); §6.1 cap scoped to blocked waits, configurable via `godot_test_driver/max_blocked_waits`.
+- **0.1 (draft, rev 2)** — added §5.0 `/reset` lifecycle endpoint; §5.10 headless rendering contract (`400 HEADLESS_RENDERING_DISABLED`, xvfb/llvmpipe CI requirement, driver-parity rule); §6 timing clarified (handling = next main-loop tick); §6.1 cap scoped to blocked waits, configurable via `godriver/max_blocked_waits`.
 - **0.1 (draft, rev 3)** — §4 expanded: frozen structured shapes for Rect2/Rect2i (flat `x,y,w,h`), Transform2D/3D (named basis columns + origin), Basis, Quaternion, Vector2i/3i/4i, AABB, Plane (math types no longer rejected); §5.0 `/reset` hardened (tween kill via `get_processed_tweens()`, orphan-node sweep with autoload/debug-node allowlist using `queue_free()`, input flush); §6 input routing changed to `Viewport.push_input` (reaches SubViewports, works under `--headless` — godot#73557) with `Input.parse_input_event` fallback for global events, plus the viewport coordinate-transform invariant for mouse events; §6 documents main-thread drain stall; §5.10 headless root-size initialization; §9 documents `--fixed-fps`/FPS-acceleration/`force_draw()` CI practices.
 - **0.1 (draft, rev 4)** — Godot 4.7 alignment + contract hardening: §4 NodePath footnote (binary serialization not byte-deterministic, godot#116104 — semantic round-trip only); §5.0 `/reset` gains optional `tween_mode` (`"kill"` default | `"await"` for signal-bound tweens via 4.7's `Tween.tween_await`); §5.1 `/health` returns `godot_version` + `spec_version`; §5.2 `GET /nodes?group=` paginated (`limit`/`offset`, `meta.total`); §5.10 visual regression scoped Linux/Windows-only for v0.1 (no macOS xvfb path exists — macOS headless rendering is a v0.2+ open question) and HDR capture explicitly unsupported (`400 HDR_NOT_SUPPORTED`, baselines stay SDR); §6 injected events set `device` to `InputEvent.DEVICE_ID_KEYBOARD`/`DEVICE_ID_MOUSE` on 4.7+ (GH-116274 breaking change), joypad-unfocused setting forced off, and signal connect/disconnect restricted to the main thread (godot#117396); §2 enumerates endpoints returning `data: null`.
 - **0.1 (draft, rev 5)** — QA-round hardening: §6 global-event fallback now calls `Input.flush_buffered_events()` after `parse_input_event` (confirmed headless workaround for godot#73557, delivers events AND updates action state); `--display-driver mock` documented as rejected (registered only in test-runner binaries); §5.0 `/reset` atomicity — 200 resolves only after the new scene is live and ready (`is_node_ready()` polling, bounded ~5s, timeout → `200` with `scene_ready: false`); §8 null writes allowed for nullable target types (Object/Resource/Variant/untyped — idiomatic clearing), `NULL_NOT_ALLOWED` kept for value types; §8 optional `target` param on `/state/set` + `/state/schema` (node or Resource path; invalid → `404 TARGET_NOT_FOUND`, new Appendix A code); §5.7 `/wait/frames` implementation note (await `process_frame` N times, never timers/sleeps); §6.1 client-side HTTP agent pool sizing (`maxSockets ≥ max_blocked_waits`) to prevent pool starvation in parallel CI.
 - **0.1 (draft, rev 6)** — edge-case hardening from sixth review: §5.0 `/reset` readiness timeout changed from `200 {scene_ready: false}` to **`504 SCENE_READY_TIMEOUT`** (new Appendix A code + §3 row) — a half-loaded tree must fail tests immediately, not mask a hang; documented async-`_ready()` caveat (`is_node_ready()` is true before async init concludes; games with async init SHOULD expose a readiness signal); §5.0 + §8 document the **ResourceLoader cache pollution vector** — `/reset` does not evict the resource cache (no public API), so mutating disk-backed `.tres` targets leaks across scenarios; rules: `duplicate()` before mutation, `take_over_path()` as advanced restore; §4 null row cross-references §8 write semantics; §5.7 pause semantics corrected — `process_frame` keeps ticking while paused (dispatcher `PROCESS_MODE_ALWAYS`), `physics_frame` reliance under pause not guaranteed, frame waits use `process_frame` only; §6 flush scope clarified (delivery into `_input()`/action state, not effect — `_physics_process`/`_unhandled_input` handlers run next tick; 1-frame auto-wait stays mandatory); §6.1 pool sizing hardened (set `maxSockets` explicitly; common tooling defaults are 4–6, never rely on defaults).
+- **0.1 (draft, rev 7)** — §5 Phase-1 endpoint reference filled (GTD-010): `GET /health` (status/godot_version/spec_version), `GET /scene/current`, `GET /input/map` (InputMap actions with per-type event summaries; device constants per §6), `GET /node/<path>` (shared node-summary shape: path/name/type/test_id/child_count/children/script), `GET /node/<path>/property/<name>` (value per §4; `PROPERTY_NOT_FOUND` covers engine-private properties), `GET /node?test_id=` (§7 resolution; O(nodes) scan note), `GET /nodes?group=` (paginated, `meta.total`, empty group = 200 not 404, out-of-range limit → `400 TYPE_MISMATCH`), `GET /state` (flat `values` map of script-declared properties). New Appendix A code `MISSING_PARAM` (400, required query/body parameter absent). Phase 2–4 endpoint sections are stubs pointing at their implementing briefs; `/ui/layout` contract note preserved (get_global_rect → flat Rect2, offset-transform-aware 4.7+).
 - Policy: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

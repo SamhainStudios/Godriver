@@ -1,14 +1,15 @@
-; Dev project for the godot-test-driver addon (repo root = Godot project,
+; Dev project for the godriver addon (repo root = Godot project,
 ; WrongVersion pattern). Non-Godot dirs carry a .gdignore.
 config_version=5
 
 [application]
 
-config/name="godot-test-driver-dev"
+config/name="godriver-dev"
 run/main_scene="res://scratch/spike/scenes/main.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
 
+Godriver="*res://addons/godriver/driver.gd"
 SpikeServer="*res://scratch/spike/scripts/spike_server.gd"
 Dispatcher="*res://scratch/spike/scripts/dispatcher.gd"

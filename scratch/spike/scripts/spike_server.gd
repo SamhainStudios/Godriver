@@ -1,8 +1,8 @@
 extends Node
 ## GTD-001 (Spike A1) — vendored godottpd serving /health from a running game.
 ##
-## Dormant unless launched with `--test-driver` (user args, after `--`).
-## Self-test mode: `-- --test-driver --self-test` runs the A1 check and quits
+## Dormant unless launched with `--spike` (user args, after `--`).
+## Self-test mode: `-- --spike --self-test` runs the A1 check and quits
 ## with exit code 0 (SPIKE_A1_OK) or 1.
 
 const PORT := 9090
@@ -23,7 +23,7 @@ var _wait_mutex := Mutex.new()
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
-	if not "--test-driver" in args:
+	if not "--spike" in args:
 		return
 	# GTD-004: keep counting frames (and draining via Dispatcher) while paused.
 	process_mode = Node.PROCESS_MODE_ALWAYS

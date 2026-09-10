@@ -50,9 +50,9 @@ The three read-only situational endpoints per SPEC §5, each self-tested.
 ## Files expected to change
 
 ```
-addons/godot-test-driver/handlers/scene_handler.gd
-addons/godot-test-driver/handlers/state_handler.gd
-addons/godot-test-driver/handlers/input_handler.gd   # map only
+addons/godriver/handlers/scene_handler.gd
+addons/godriver/handlers/state_handler.gd
+addons/godriver/handlers/input_handler.gd   # map only
 ```
 
 ## References

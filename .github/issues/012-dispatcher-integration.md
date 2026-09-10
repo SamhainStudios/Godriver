@@ -21,7 +21,7 @@ All addon handlers execute through the main-thread task queue, with unit tests p
 
 **In scope:**
 
-- Move `dispatcher.gd` into `addons/godot-test-driver/`; `api_handler.gd` routes every request through `submit()`
+- Move `dispatcher.gd` into `addons/godriver/`; `api_handler.gd` routes every request through `submit()`
 - Handler registration map (route → handler callable)
 - Error funnel: handler exceptions → `500` envelope, never a crash
 
@@ -51,8 +51,8 @@ All addon handlers execute through the main-thread task queue, with unit tests p
 ## Files expected to change
 
 ```
-addons/godot-test-driver/dispatcher.gd
-addons/godot-test-driver/api_handler.gd
+addons/godriver/dispatcher.gd
+addons/godriver/api_handler.gd
 ```
 
 ## References

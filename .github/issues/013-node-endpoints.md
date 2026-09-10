@@ -52,7 +52,7 @@ Node info and property read endpoints per SPEC §5, with §4 Variant shapes roun
 ## Files expected to change
 
 ```
-addons/godot-test-driver/handlers/node_handler.gd
+addons/godriver/handlers/node_handler.gd
 ```
 
 ## References

@@ -1,4 +1,4 @@
-# ROADMAP — Godot Test Driver
+# ROADMAP — Godriver
 
 Technical schedule of record. PLAN.md stays the *why* (motivation, competitive landscape, architecture rationale); SPEC.md stays the *what* (HTTP contract); this file is the *when and in what order*. Task briefs live in `.github/issues/` as numbered files (pattern borrowed from the WrongVersion project); they are seeded to GitHub when work starts and stay readable without a login.
 
@@ -56,7 +56,7 @@ Technical schedule of record. PLAN.md stays the *why* (motivation, competitive l
 | #   | Task                                              | Size | Depends | Key acceptance criteria                                                                                                                                                                        |
 | --- | ------------------------------------------------- | ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 010 | SPEC §5 endpoint reference (read-only endpoints)  | S    | —       | Every Phase-1 endpoint documented: method, params, response schema, status codes, copy-pasteable `curl` (`PLAN SPEC requirements`). A stranger could write a client from SPEC alone.            |
-| 011 | Addon structure + activation flag + `/health`     | S    | 001–004 | `addons/godot-test-driver/` structure per `PLAN File Structure`; dormant unless `--test-driver` in `OS.get_cmdline_user_args()`; `/health` returns `{status, godot_version, spec_version}`; port taken → clear error; `--test-driver-port=N` override. |
+| 011 | Addon structure + activation flag + `/health`     | S    | 001–004 | `addons/godriver/` structure per `PLAN File Structure`; dormant unless `--test-driver` in `OS.get_cmdline_user_args()`; `/health` returns `{status, godot_version, spec_version}`; port taken → clear error; `--test-driver-port=N` override. |
 | 012 | Dispatcher wired into the addon                   | S    | 011     | All handlers dispatch through the Phase-0 task queue; unit tests prove main-thread execution; no request blocks the main loop.                                                                  |
 | 013 | `/node/<path>` + `/node/<path>/property/<name>`   | S    | 012     | Node info (type, children, properties) and property read per SPEC §5; unknown node → 404 (no crash); §4 Variant shapes round-trip (property tests from scaffold).                               |
 | 014 | `GET /node?test_id=x` + `GET /nodes?group=y`      | S    | 013     | Spike C logic productionized; group query paginated (`limit=100` default, max 1000, `meta.total` — SPEC §5.2); ambiguity → 409.                                                                 |

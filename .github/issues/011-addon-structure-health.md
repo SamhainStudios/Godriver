@@ -11,7 +11,7 @@ resolution:
 
 ## Context
 
-Phase 0 proved the mechanics; now they become the real addon structure under `addons/godot-test-driver/` (PLAN File Structure), dormant unless flagged.
+Phase 0 proved the mechanics; now they become the real addon structure under `addons/godriver/` (PLAN File Structure), dormant unless flagged.
 
 ## Goal
 
@@ -21,7 +21,7 @@ The addon registers as an EditorPlugin + dormant autoload, serves `/health` on a
 
 **In scope:**
 
-- `addons/godot-test-driver/`: `plugin.cfg`, `plugin.gd`, `http_server.gd`, `api_handler.gd`, vendored `godottpd/` moved in from scratch
+- `addons/godriver/`: `plugin.cfg`, `plugin.gd`, `http_server.gd`, `api_handler.gd`, vendored `godottpd/` moved in from scratch
 - Activation: `--test-driver` in `OS.get_cmdline_user_args()`; dormant otherwise (zero overhead in shipped builds — PLAN Open Q3)
 - `/health` → `{status, godot_version, spec_version}` (SPEC §5.1)
 - Port: default 9090; taken → clear error; `--test-driver-port=N` override; `=0` → ephemeral, printed to stdout (PLAN Open Q2)
@@ -55,10 +55,10 @@ The addon registers as an EditorPlugin + dormant autoload, serves `/health` on a
 ## Files expected to change
 
 ```
-addons/godot-test-driver/plugin.cfg
-addons/godot-test-driver/plugin.gd
-addons/godot-test-driver/http_server.gd
-addons/godot-test-driver/api_handler.gd
+addons/godriver/plugin.cfg
+addons/godriver/plugin.gd
+addons/godriver/http_server.gd
+addons/godriver/api_handler.gd
 ```
 
 ## References

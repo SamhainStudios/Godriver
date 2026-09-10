@@ -110,7 +110,7 @@ Split by **language first**, then by **functionality** inside each language:
 | Package                              | Depends on       | Purpose                                                                                            | Port target                                                   |
 | ------------------------------------ | ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `spec/SPEC.md`                       | —                | HTTP API contract (endpoints, JSON shapes, errors). Single source of truth.                        | Any language reads this                                       |
-| `addons/godot-test-driver/`          | —                | Engine-side HTTP server. Single implementation, language-independent (Godot only speaks GDScript). | —                                                             |
+| `addons/godriver/`          | —                | Engine-side HTTP server. Single implementation, language-independent (Godot only speaks GDScript). | —                                                             |
 | `js/core` → `@godriver/core`         | —                | HTTP client: nodes, input, state, waits. **No Cucumber, no test-runner deps.**                     | Python/Go/C# ports reimplement ONLY this                      |
 | `js/cucumber` → `@godriver/cucumber` | core             | World, hooks, 60+ pre-built steps                                                                  | Each language has its own BDD layer (behave, godog, Reqnroll) |
 | `js/visual` → `@godriver/visual`     | core             | `pixelmatch` + `sharp` baseline diffing                                                            | Port only if needed                                           |
@@ -131,7 +131,7 @@ Split by **language first**, then by **functionality** inside each language:
 5. **Endpoint reference** — method, path, path/query/body params with types, response schema, status codes, and a copy-pasteable `curl` per endpoint.
 6. **Timing guarantees** — which endpoints are synchronous vs fire-and-forget, default timeout, and the input ordering contract (below).
 7. **test_id resolution rules** — scope (whole tree vs current scene), first-match vs error-on-ambiguity, behavior on zero matches (`404`) and multiple matches (`409` with the list of matching paths).
-8. **State autoload contract** — how the autoload is discovered (project setting `godot_test_driver/state_autoload`, default `GameState`), type coercion rules, unknown-key error shape, `GET /state/schema` response shape.
+8. **State autoload contract** — how the autoload is discovered (project setting `godriver/state_autoload`, default `GameState`), type coercion rules, unknown-key error shape, `GET /state/schema` response shape.
 9. **Determinism semantics** — what `/dev/seed` seeds (global RNG via `seed()`; per-instance `RandomNumberGenerator` NOT affected unless documented), what `/dev/time_scale` affects (`Engine.time_scale`: timers, animations, physics — NOT wall-clock awaits), what `/dev/pause` freezes (physics + process per pause mode; UI input behavior per pause mode).
 
 ### Input Ordering Semantics (the anti-heisenbug clause)
@@ -373,7 +373,7 @@ Inspired by the Page Object pattern from web testing, but adapted for Godot's sc
 
 `POST /state/set` writes to the project's **state autoload** — convention over configuration:
 
-- Addon looks for autoload named `GameState` (configurable: `godot_test_driver/state_autoload` project setting)
+- Addon looks for autoload named `GameState` (configurable: `godriver/state_autoload` project setting)
 - Keys must match properties on that autoload; JSON values coerced to declared types (`"3"` → int, `"true"` → bool, arrays/dicts pass through)
 - Unknown key → `400` with valid keys from `GET /state/schema`
 
@@ -401,7 +401,7 @@ Without seed control, identical runs diverge — flaky tests guaranteed. Ships i
 
 ### vs Watershed (inspiration, not competitor)
 
-| Aspect   | Watershed              | Godot Test Driver     |
+| Aspect   | Watershed              | Godriver     |
 | -------- | ---------------------- | --------------------- |
 | Target   | Web/mobile/API testing | Godot game UI testing |
 | Engine   | Selenium/Appium        | GDScript HTTP addon   |
@@ -538,7 +538,7 @@ The riskiest assumptions get proven before any formal build:
 ### Sprint 1 — Skeleton (Week 1)
 
 - [ ] Fill §5 endpoint reference in `spec/SPEC.md` (v0.1 draft exists — §1–§4, §6–§9 already decided)
-- [ ] Create GDScript addon structure under `addons/godot-test-driver/`
+- [ ] Create GDScript addon structure under `addons/godriver/`
 - [ ] Implement HTTP server on vendored godottpd + main-thread dispatcher task queue (works on 4.3+)
 - [ ] `--test-driver` activation flag (dormant by default)
 - [ ] `/health` endpoint
@@ -650,7 +650,7 @@ An industry-grade framework ships docs as a first-class deliverable, structured 
 ## File Structure
 
 ```
-godot-test-driver/                        ← monorepo (split by LANGUAGE, then by functionality)
+godriver/                        ← monorepo (split by LANGUAGE, then by functionality)
 ├── PLAN.md
 ├── LICENSE
 ├── README.md
@@ -671,7 +671,7 @@ godot-test-driver/                        ← monorepo (split by LANGUAGE, then 
 │       ├── addon-internals.md
 │       └── determinism.md
 ├── addons/                               ← engine-side: SINGLE implementation, language-independent
-│   ├── godot-test-driver/
+│   ├── godriver/
 │       ├── plugin.cfg
 │       ├── plugin.gd                     ← autoload entry point
 │       ├── http_server.gd                ← HTTP routing layer (on vendored godottpd — see Open Q1 / Spike A)
@@ -730,24 +730,24 @@ godot-test-driver/                        ← monorepo (split by LANGUAGE, then 
 
 ### Consuming from WrongVersion (or any Godot project)
 
-**Godot addon** — copy `addons/godot-test-driver/` into your project:
+**Godot addon** — copy `addons/godriver/` into your project:
 
 ```bash
-cp -r godot-test-driver/addons/godot-test-driver/ WrongVersion/addons/
+cp -r godriver/addons/godriver/ WrongVersion/addons/
 ```
 
 **JS client** — install via npm or symlink:
 
 ```bash
 # Option A: npm link (development)
-cd godot-test-driver/js/core && npm link
+cd godriver/js/core && npm link
 cd WrongVersion/test && npm link @godriver/core @godriver/cucumber
 
 # Option B: git submodule
 git submodule add <repo-url> WrongVersion/test/driver
 
 # Option C: copy (simplest)
-cp -r godot-test-driver/js/ WrongVersion/test/driver/
+cp -r godriver/js/ WrongVersion/test/driver/
 ```
 
 **Test specs** — live in the consuming project:
@@ -755,7 +755,7 @@ cp -r godot-test-driver/js/ WrongVersion/test/driver/
 ```
 WrongVersion/test/
 ├── PLAN.md                  ← game-specific test plan
-├── driver/                  ← symlink or copy of godot-test-driver
+├── driver/                  ← symlink or copy of godriver
 ├── features/                ← Gherkin feature files
 │   ├── start_new_game.feature
 │   ├── pause_menu.feature

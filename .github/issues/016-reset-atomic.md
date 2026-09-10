@@ -52,7 +52,7 @@ Atomic reset: 200 resolves only after the new scene is live and ready; full tear
 ## Files expected to change
 
 ```
-addons/godot-test-driver/handlers/scene_handler.gd   # reset logic
+addons/godriver/handlers/scene_handler.gd   # reset logic
 ```
 
 ## References
