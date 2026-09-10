@@ -1,0 +1,15 @@
+{
+  "name": "godriver-js",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "core"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --allowJs --checkJs core/test/types.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  }
+}

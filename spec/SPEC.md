@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 7)
+Version: 0.1 (draft, rev 13)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
        implements against this document and nothing else.
@@ -106,7 +106,7 @@ Resets the game to a clean baseline for scenario isolation.
   4. Reset the state autoload to its initial property values (autoloads persist across scene changes — a scene reload alone does NOT reset them)
   5. Load the main scene via `change_scene_to_file(ProjectSettings.get_setting("application/run/main_scene"))` — NOT `reload_current_scene()`, which reloads whatever scene is current after `/scene/load`
   6. Handle tweens per `tween_mode`: `"kill"` (default) — iterate `get_tree().get_processed_tweens()` and `kill()` each (tweens created via `SceneTree.create_tween()` are bound to the tree, NOT the scene, and survive `change_scene_to_file`; callbacks would leak into the new scenario). `"await"` — wait for signal-bound tweens (created via 4.7's `Tween.tween_await(signal)`) to complete before proceeding; use only when tween completion is part of the fixture semantics. A reset must never hang by default, so `"kill"` is the default.
-  7. Sweep orphan nodes: `queue_free()` (NEVER `free()` — deferred teardown avoids destroying nodes while pending callables/signals are still in the frame's call queue) every direct child of `/root` NOT on the allowlist: the main scene instance, the test driver autoload, all autoloads registered in `ProjectSettings` (`autoload/*`), and internal Godot debug nodes attached to `/root` in debug builds
+  7. Sweep orphan nodes: `queue_free()` (NEVER `free()` — deferred teardown avoids destroying nodes while pending callables/signals are still in the frame's call queue) every direct child of `/root` NOT on the allowlist: the main scene instance, the test driver autoload, all autoloads registered in `ProjectSettings` (`autoload/*`), engine auto-named internal nodes (`@`-prefixed — debug helpers, test-runner hosts), and nodes carrying a `godriver_keep` metadata key (escape hatch for test harnesses that live under `/root`)
   8. Flush the input queue: `Input.flush_buffered_events()` — discard injected-but-unprocessed input from the previous scenario
 - Out-of-scope (documented limitation): audio bus layouts, OS clipboard, and singletons created outside the state contract are NOT reset by `/reset`; tests must not rely on cross-scenario audio/clipboard state.
 - **Resource-cache out-of-scope (⚠ cross-scenario pollution vector)**: `/reset` does NOT evict the `ResourceLoader` memory cache — Godot provides no public API to clear it wholesale, and cached entries persist across scene changes while refcount > 0 (`CACHE_MODE_REUSE` is the load default). Consequence: if a test mutates a disk-backed `.tres` (e.g. via `/state/set` with a `res://` target), a later `/reset` + scene reload returns the **mutated** in-memory resource, not the on-disk original. Rules:
@@ -114,8 +114,8 @@ Resets the game to a clean baseline for scenario isolation.
   - Restoring an on-disk original over a mutated cache entry requires `take_over_path()` on a fresh load — documented as an advanced fixture pattern, not automated by `/reset`.
   - Covered by a dedicated self-test fixture (Sprint 0: `.tres` cache isolation across resets).
 - Response: `{"ok": true, "data": {"reloaded_scene": "res://Main.tscn", "scene_ready": true}}`
-- **Atomicity contract**: `/reset` resolves `200` only after the new scene is live and ready — the driver calls `change_scene_to_file`, then awaits `process_frame` until `get_tree().current_scene` changes, then awaits the new scene's readiness (poll `is_node_ready()` rather than awaiting `ready`, which may already have fired by the time the driver observes the scene change). The readiness wait is bounded (default ~5s); **on timeout the response is `504 SCENE_READY_TIMEOUT`** — a scene that isn't ready after the bound is an abnormal condition (engine hang or a scene whose `_ready()` defers initialization asynchronously), and returning success-shaped data would mask it. Tests fail immediately instead of asserting against a half-loaded tree. Clients no longer need a follow-up `/wait/frames` before asserting.
-- **Async-initialization caveat**: `is_node_ready()` returns `true` as soon as `_ready()` has *started and returned synchronously* — a scene that kicks off async work inside `_ready()` (e.g. `await get_tree().create_timer(...)`, deferred sub-resource loading) reports ready before that work concludes. `/reset` cannot detect this (there is no engine-level "fully initialized" signal). Games with async init SHOULD expose a readiness signal testable via `/signal/wait`; document this in client docs.
+- **Atomicity contract**: `/reset` resolves `200` only after the new scene is live and ready — the driver calls `change_scene_to_file`, then awaits `process_frame` until `get_tree().current_scene` changes, then polls `is_node_ready()` (never awaiting `ready`, which may already have fired). The readiness wait is bounded (default ~5s); **on timeout the response is `504 SCENE_READY_TIMEOUT`** — a scene that isn't ready after the bound is an abnormal condition (engine hang or a scene that never appears), and returning success-shaped data would mask it. Tests fail immediately instead of asserting against a half-loaded tree. Clients no longer need a follow-up `/wait/frames` before asserting.
+- **Async-initialization caveat (⚠ verified against engine behavior)**: `is_node_ready()` becomes `true` when `NOTIFICATION_READY` is dispatched — **before a suspended script `_ready()` concludes**. A scene whose `_ready()` awaits (async init, deferred loading) reports ready immediately; `/reset` therefore CANNOT detect async initialization at all (verified: a scene whose `_ready()` awaits forever still yields a `200` reset). Games with async init MUST expose a readiness signal testable via `/signal/wait` and wait on it explicitly. The `504` bound remains defensive: it fires only if the new scene never appears or the engine hangs.
 - Status codes: `200`, `409 STATE_AUTOLOAD_MISSING` (reset proceeds without state step), `504 SCENE_READY_TIMEOUT`, `500 INTERNAL`
 
 ### 5.1 Health & metadata
@@ -191,7 +191,16 @@ curl http://127.0.0.1:9090/input/map
 
 #### `GET /ui/layout/<path>`
 
-**Documented with its implementing brief (Phase 2).** Contract note frozen here: layout bounds are the node's `get_global_rect()` returned as a flat §4 `Rect2` (`{x,y,w,h}`), and are offset-transform-aware on 4.7+ via `Control.offset_transform_*`.
+Control layout inspection (GTD-025). Target by path (`/ui/layout/root/Main/Button`) or by `test_id` (`/ui/layout?test_id=<id>` — §7 resolution).
+
+- Response: `{"ok": true, "data": {path, type, visible, visible_in_tree, global_rect: {x,y,w,h}, position: {x,y}, size: {x,y}, anchors: {left,top,right,bottom,offset_left,offset_top,offset_right,offset_bottom}, pivot: {x,y}, rotation, scale: {x,y}, mouse_filter}}`
+- Bounds = `get_global_rect()` as a flat §4 `Rect2` — viewport-canvas coordinates (§6 invariant), offset-transform-aware on 4.7+ via `Control.offset_transform_*`
+- `?depth=N` (default 0, max 16): include child Control layouts recursively under `children` (non-Control children skipped)
+- Errors: `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `400 BAD_TARGET` (not a Control), `400 TYPE_MISMATCH` (depth outside 0..16)
+
+```bash
+curl http://127.0.0.1:9090/ui/layout/root/Main/Button?depth=1
+```
 
 ### 5.2 Node queries
 
@@ -280,11 +289,75 @@ curl "http://127.0.0.1:9090/nodes?group=enemies&limit=100&offset=0"
 
 ### 5.3 Input (`/input/click`, `/input/type`, `/input/key`, `/input/drag`, `/input/gamepad`)
 
-**Documented with their implementing briefs (Phase 2).** Contract prerequisites already frozen: §6 timing/routing, §4 shapes, Appendix A codes.
+#### `POST /input/click`
+
+Inject a left-click at the center of a target Control. **200 = injected only** (§6 timing contract): the events are queued into the target's owning viewport; effects (e.g. a `pressed` signal) land on the next engine tick. Auto-wait is client-side.
+
+- Body: exactly one of `{"path": "<node path>"}` or `{"test_id": "<id>"}` (§7 resolution)
+- Response: `{"ok": true, "data": {"injected": true, "target": "/root/Main/Button", "viewport": "/root"}}`
+- Routing (§6): hover-establishing motion + press + release via the owning `Viewport.push_input()` (works headless, reaches SubViewports); for SubViewportContainer-embedded targets the hover motion is routed through the root viewport at window coordinates (engine hover-walk requirement, godot#89757)
+- Errors: `400 MISSING_PARAM` (both or neither of path/test_id), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID` (details.matches), `400 BAD_TARGET` (target is not a Control)
+
+```bash
+curl -X POST http://127.0.0.1:9090/input/click \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/root/Main/Button"}'
+```
+
+#### `POST /input/type`
+
+Type text into a target Control (LineEdit/TextEdit): the addon grabs focus on the target, then injects one pressed+released `InputEventKey` pair per character (unicode set) via the owning viewport `push_input()` — the targeted path, works headless. Typing never goes through `Input.parse_input_event` (it requires a focused Control).
+
+- Body: `{"path": "<node path>"}` or `{"test_id": "<id>"}` **plus** `{"text": "<non-empty string>"}`
+- Response: `{"ok": true, "data": {"injected": true, "chars": 5, "target": "/root/Main/Edit"}}`
+- Errors: `400 MISSING_PARAM` (text missing/empty, or path/test_id both/neither), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `400 BAD_TARGET` (target is not a Control)
+- Limitation: no modifier-chord composition (shift+letter) in v0.1 — each character is injected as-is
+
+```bash
+curl -X POST http://127.0.0.1:9090/input/type \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/root/Main/Edit", "text": "hello"}'
+```
+
+#### `POST /input/key`
+
+Inject a key press+release. The `key` parameter resolves in order:
+
+1. **InputMap action name** (e.g. `ui_accept`) → the first `InputEventKey` of the action's event list supplies keycode/physical_keycode
+2. **`KEY_*` constant name** (e.g. `KEY_ENTER`) → resolved via the addon's generated constant map (ClassDB does not expose `@GlobalScope` constants; the map references the GDScript globals directly and is parse-time checked)
+
+- Body: `{"key": "<action name or KEY_* constant>"}`; optional `path`/`test_id` targets the key at a Control (grab_focus + owning-viewport `push_input`) instead of the global path
+- Global form (no target): `Input.parse_input_event()` + `Input.flush_buffered_events()` — the godot#73557 headless workaround; delivers the events AND updates action state (`Input.is_action_just_pressed` works). Press and release are flushed in the same frame, so held state (`is_action_pressed`) is not observable — use `is_action_just_pressed` or a targeted form
+- Response: `{"ok": true, "data": {"injected": true, "key": "ui_accept", "device": 16, "target": ""}}` (device per §6: keyboard = 16 on 4.7+)
+- Errors: `400 MISSING_PARAM`, `400 UNKNOWN_KEY` (neither action nor KEY_* constant), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `400 BAD_TARGET`
+- Out of scope (v0.1): gamepad (`/input/gamepad`, v0.2), touch (v0.2), modifier chords
+
+```bash
+curl -X POST http://127.0.0.1:9090/input/key \
+  -H "Content-Type: application/json" \
+  -d '{"key": "ui_accept"}'
+```
+
+`/input/drag`, `/input/gamepad`: **documented with their implementing briefs (Phase 2).** Contract prerequisites already frozen: §6 timing/routing, §4 shapes, Appendix A codes.
 
 ### 5.4 Scene (`/scene/load`)
 
-**Documented with its implementing brief (Phase 2).**
+#### `POST /scene/load`
+
+Change the current scene to an arbitrary scene with `/reset`'s readiness semantics (§5.0): **200 only after the new scene is live and ready**; `504 SCENE_READY_TIMEOUT` on the bounded readiness wait; `503 SERVER_BUSY` while a scene transition is in flight (the in-flight guard is SHARED with `/reset` — a load and a reset must never interleave).
+
+- Body: `{"path": "res://game/levels/level_1.tscn"}`
+- Response: `{"ok": true, "data": {"loaded": "<path>", "scene_ready": true}}`
+- Readiness steps (shared with `/reset`): `change_scene_to_file` → await `process_frame` until `current_scene` changes → poll `is_node_ready()` (5s bound → 504)
+- **Difference from `/reset`**: load is a transition, not a cleanup — the tween-kill and orphan-sweep steps are SKIPPED (tests needing full isolation call `/reset`)
+- Errors: `400 MISSING_PARAM`, `404 SCENE_NOT_FOUND` (path is not a loadable PackedScene — `ResourceLoader.exists(path, "PackedScene")`), `504 SCENE_READY_TIMEOUT`, `503 SERVER_BUSY`
+- Out of scope (v0.1): additive scene instantiation (`add_child` scenes); PackedScene preloading cache behavior (§5.0 resource-cache block)
+
+```bash
+curl -X POST http://127.0.0.1:9090/scene/load \
+  -H "Content-Type: application/json" \
+  -d '{"path": "res://game/levels/level_1.tscn"}'
+```
 
 ### 5.5 Signals (`/signal/watch`, `/signal/poll`, `/signal/wait`)
 
@@ -327,6 +400,24 @@ curl http://127.0.0.1:9090/state
 ### 5.9 Determinism (`/dev/seed`, `/dev/time_scale`, `/dev/pause`, `/dev/save/load`)
 
 **Documented with their implementing briefs (Phase 3).** Semantics frozen in §9.
+
+### 5.9a Assets (`/assets/loaded`)
+
+#### `GET /assets/loaded`
+
+Resource inventory for leak detection. **Scope limitation (v0.1, decision gate GTD-024):** Godot 4.7 exposes NO public API to enumerate all loaded resources (`ResourceLoader.list_handled_resources()` does not exist; verified against the 4.7.2 method table). The endpoint therefore reports:
+
+- `count` — the engine-wide live resource count via `Performance.get_monitor(OBJECT_RESOURCE_COUNT)` (usable for before/after leak assertions)
+- `resources` — the DRIVER-TRACKED inventory only: scenes loaded through `/scene/load` and `/reset` (each `{path, source}`), paginated `limit` (default 100, max 1000) / `offset` with `meta.total`
+
+A full engine-wide inventory requires engine instrumentation and is deferred (revisit when Godot ships a public enumeration API).
+
+- Response: `{"ok": true, "data": {"count": <int>, "resources": [{"path": "...", "source": "scene_load"}], "meta": {"total": <int>}}}`
+- Errors: `400 TYPE_MISMATCH` (limit outside 1..1000); empty inventory = 200
+
+```bash
+curl http://127.0.0.1:9090/assets/loaded
+```
 
 ### 5.10 Screenshots — rendering-context requirement
 
@@ -491,4 +582,16 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 5)** — QA-round hardening: §6 global-event fallback now calls `Input.flush_buffered_events()` after `parse_input_event` (confirmed headless workaround for godot#73557, delivers events AND updates action state); `--display-driver mock` documented as rejected (registered only in test-runner binaries); §5.0 `/reset` atomicity — 200 resolves only after the new scene is live and ready (`is_node_ready()` polling, bounded ~5s, timeout → `200` with `scene_ready: false`); §8 null writes allowed for nullable target types (Object/Resource/Variant/untyped — idiomatic clearing), `NULL_NOT_ALLOWED` kept for value types; §8 optional `target` param on `/state/set` + `/state/schema` (node or Resource path; invalid → `404 TARGET_NOT_FOUND`, new Appendix A code); §5.7 `/wait/frames` implementation note (await `process_frame` N times, never timers/sleeps); §6.1 client-side HTTP agent pool sizing (`maxSockets ≥ max_blocked_waits`) to prevent pool starvation in parallel CI.
 - **0.1 (draft, rev 6)** — edge-case hardening from sixth review: §5.0 `/reset` readiness timeout changed from `200 {scene_ready: false}` to **`504 SCENE_READY_TIMEOUT`** (new Appendix A code + §3 row) — a half-loaded tree must fail tests immediately, not mask a hang; documented async-`_ready()` caveat (`is_node_ready()` is true before async init concludes; games with async init SHOULD expose a readiness signal); §5.0 + §8 document the **ResourceLoader cache pollution vector** — `/reset` does not evict the resource cache (no public API), so mutating disk-backed `.tres` targets leaks across scenarios; rules: `duplicate()` before mutation, `take_over_path()` as advanced restore; §4 null row cross-references §8 write semantics; §5.7 pause semantics corrected — `process_frame` keeps ticking while paused (dispatcher `PROCESS_MODE_ALWAYS`), `physics_frame` reliance under pause not guaranteed, frame waits use `process_frame` only; §6 flush scope clarified (delivery into `_input()`/action state, not effect — `_physics_process`/`_unhandled_input` handlers run next tick; 1-frame auto-wait stays mandatory); §6.1 pool sizing hardened (set `maxSockets` explicitly; common tooling defaults are 4–6, never rely on defaults).
 - **0.1 (draft, rev 7)** — §5 Phase-1 endpoint reference filled (GTD-010): `GET /health` (status/godot_version/spec_version), `GET /scene/current`, `GET /input/map` (InputMap actions with per-type event summaries; device constants per §6), `GET /node/<path>` (shared node-summary shape: path/name/type/test_id/child_count/children/script), `GET /node/<path>/property/<name>` (value per §4; `PROPERTY_NOT_FOUND` covers engine-private properties), `GET /node?test_id=` (§7 resolution; O(nodes) scan note), `GET /nodes?group=` (paginated, `meta.total`, empty group = 200 not 404, out-of-range limit → `400 TYPE_MISMATCH`), `GET /state` (flat `values` map of script-declared properties). New Appendix A code `MISSING_PARAM` (400, required query/body parameter absent). Phase 2–4 endpoint sections are stubs pointing at their implementing briefs; `/ui/layout` contract note preserved (get_global_rect → flat Rect2, offset-transform-aware 4.7+).
+
+- **0.1 (draft, rev 8)** — `/reset` implemented (GTD-016) with engine-verified corrections: §5.0 async-init caveat strengthened — `is_node_ready()` becomes true when `NOTIFICATION_READY` dispatches, BEFORE a suspended script `_ready()` concludes (verified: a scene whose `_ready()` awaits forever still yields `200`), so `/reset` cannot detect async init at all and games with async init MUST expose a readiness signal; the `504 SCENE_READY_TIMEOUT` bound is defensive (scene never appears / engine hang), not reachable from a suspended `_ready()`. Orphan-sweep allowlist now includes engine auto-named (`@`-prefixed) internal nodes and the `godriver_keep` metadata escape hatch.
+
+- **0.1 (draft, rev 9)** — `POST /input/click` implemented (GTD-020): §5.3 entry filled (body = exactly one of `path`/`test_id`; response `{injected, target, viewport}`; routing per §6 with the SubViewportContainer hover-through-root rule; errors `MISSING_PARAM`/`NODE_NOT_FOUND`/`TEST_ID_NOT_FOUND`/`AMBIGUOUS_TEST_ID`/`BAD_TARGET`). §6 coordinate invariant refined with the spike-verified rule: `Control.get_global_rect()` is already viewport-canvas space — the `affine_inverse` mapping applies only from WINDOW coordinates.
+
+- **0.1 (draft, rev 10)** — `POST /input/type` + `POST /input/key` implemented (GTD-021): §5.3 entries filled. Key resolution order = InputMap action first, then `KEY_*` constant via the generated `TestDriverKeyMap` map (finding: ClassDB does NOT expose `@GlobalScope` constants and `Expression` cannot resolve them — the map references GDScript globals directly, parse-time checked; `KEY_CMD_OR_CTRL` excluded as platform-conditional). Global key form = `Input.parse_input_event` + `Input.flush_buffered_events()` (godot#73557); press+release flush in the SAME frame so held state (`is_action_pressed`) is not observable — `is_action_just_pressed` is (documented). Typing = targeted path only (grab_focus + per-char unicode key events), never `parse_input_event`. New error code usage: `400 UNKNOWN_KEY`.
+
+- **0.1 (draft, rev 11)** — `POST /scene/load` implemented (GTD-023): §5.4 entry filled (readiness semantics shared with `/reset`; tween/orphan steps SKIPPED — load is a transition, not a cleanup; in-flight guard SHARED with `/reset` → `503 SERVER_BUSY`; `404 SCENE_NOT_FOUND` via `ResourceLoader.exists(path, "PackedScene")`). GTD-022 compat shim: `TestDriverCompat` (device-ID constants 16/32/-1 on 4.7+ with 0 fallback, `ignore_joypad_on_unfocused_application=false` at startup) — all injected events stamp device through compat.
+
+- **0.1 (draft, rev 12)** — `GET /assets/loaded` implemented (GTD-024) as new §5.9a with an explicit scope limitation: Godot 4.7 has NO public API to enumerate all loaded resources (`ResourceLoader.list_handled_resources()` absent — verified against the 4.7.2 ClassDB method table), so the endpoint reports the engine-wide resource count (`Performance.get_monitor(OBJECT_RESOURCE_COUNT)`) plus the DRIVER-TRACKED inventory (scene loads via `/scene/load` and `/reset`), paginated. Full inventory deferred until Godot ships an enumeration API.
+
+- **0.1 (draft, rev 13)** — `GET /ui/layout/<path>` implemented (GTD-025): §5.1 entry filled (path or test_id targeting; snapshot shape with `global_rect` flat Rect2 via `get_global_rect()` viewport-canvas coords; `?depth=N` recursion max 16; errors `NODE_NOT_FOUND`/`TEST_ID_NOT_FOUND`/`AMBIGUOUS_TEST_ID`/`BAD_TARGET`/`TYPE_MISMATCH`).
 - Policy: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

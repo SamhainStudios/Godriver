@@ -18,9 +18,11 @@ func test_parse_args_defaults_and_overrides() -> void:
 
 func test_dormant_without_flag() -> void:
 	# A driver node added to the tree without --test-driver must stay dormant:
-	# no TestDriverServer child, no socket.
+	# no TestDriverServer child, no socket. (GdUnit v6.2.1's scene_runner has
+	# no simulate_start(); plain add_child exercises _ready() the same way.)
 	var driver: Node = auto_free(DriverScript.new())
-	scene_runner(driver).simulate_start()
+	add_child(driver)
+	await get_tree().process_frame
 	assert_int(driver.get_child_count()).is_equal(0)
 
 

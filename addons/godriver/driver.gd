@@ -14,6 +14,7 @@ extends Node
 const DEFAULT_PORT := 9090
 
 var _server: TestDriverServer
+var _dispatcher: TestDriverDispatcher
 
 
 static func parse_args(args: PackedStringArray) -> Dictionary:
@@ -33,6 +34,9 @@ func _ready() -> void:
 	if not "--test-driver" in args:
 		return  # dormant: no socket, no processing
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# GTD-022: version-compat startup settings (joypad focus filtering off so
+	# synthetic joypad events process in headless/unfocused CI runs).
+	TestDriverCompat.apply_startup_settings()
 	# Headless fix (GTD-005, engine-source verified): under --headless the root
 	# Window defaults to 64x64 and hover resolution drops any pushed position
 	# outside the visible rect. Size the root from project settings.
@@ -41,9 +45,14 @@ func _ready() -> void:
 			int(ProjectSettings.get_setting("display/window/size/viewport_width", 1152)),
 			int(ProjectSettings.get_setting("display/window/size/viewport_height", 648)))
 	var parsed := parse_args(args)
+	# GTD-012: the dispatcher is the single path from HTTP worker threads to
+	# SceneTree access. Own instance (the spike's Dispatcher autoload is a
+	# separate dev-project concern; shipped games only have this addon).
+	_dispatcher = TestDriverDispatcher.new()
+	add_child(_dispatcher)
 	_server = TestDriverServer.new()
 	add_child(_server)
-	_server.setup(parsed.port, parsed.token)
+	_server.setup(parsed.port, parsed.token, _dispatcher)
 	if not _server.start():
 		push_error("[godriver] could not bind port %d — is another instance running? Override with --test-driver-port=N" % parsed.port)
 		get_tree().quit(1)

@@ -84,7 +84,7 @@ func _print_debug(message: String) -> void:
 func register_router(router: HttpRouter) -> void:
 	var path_regex = RegEx.new()
 	var params: Array[String] = []
-	if router.path.left(0) == "^":
+	if router.path.left(1) == "^":
 		path_regex.compile(router.path)
 	else:
 		var regexp: Array = _path_to_regexp(router.path, router is HttpFileRouter)

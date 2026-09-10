@@ -1,5 +1,6 @@
+class_name TestDriverDispatcher
 extends Node
-## GTD-002 (Spike A2) — main-thread dispatcher task queue.
+## GTD-012 — main-thread task queue (moved from the GTD-002 spike).
 ##
 ## godottpd handles requests on worker threads; Godot's SceneTree/node APIs are
 ## not thread-safe. Workers call `submit(callable)`; the callable is executed on
@@ -9,6 +10,11 @@ extends Node
 ##
 ## Runs with PROCESS_MODE_ALWAYS so the queue keeps draining while
 ## `get_tree().paused = true` (else /dev/pause would freeze every endpoint).
+##
+## Error semantics: a handler that hits a script error aborts and returns
+## null — the queue still posts the semaphore and keeps draining, so the
+## API layer's funnel (api_handler.gd) maps the null result to a 500
+## envelope and the server stays up.
 
 var _mutex: Mutex
 ## Queue records: {callable: Callable, semaphore: Semaphore, result: Variant}

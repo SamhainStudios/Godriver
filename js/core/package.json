@@ -1,0 +1,23 @@
+{
+  "name": "@godriver/core",
+  "version": "0.1.0",
+  "description": "Portable HTTP client for the Godot Test Driver addon (SPEC v0.1). Zero runner dependencies.",
+  "type": "module",
+  "main": "src/client.js",
+  "exports": {
+    ".": "./src/client.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "undici": "^7.16.0"
+  },
+  "keywords": [
+    "godot",
+    "testing",
+    "e2e",
+    "bdd"
+  ],
+  "license": "MIT"
+}

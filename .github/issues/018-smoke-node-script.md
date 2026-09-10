@@ -4,7 +4,7 @@ labels: area/client, type/feature, priority/P1, agent-ready, size/XS
 milestone: v0.1
 phase: 1
 depends: 013, 014, 015, 017
-resolution:
+resolution: DONE 2026-09-10 — examples/smoke.mjs committed; SMOKE_OK exit 0 against live --test-driver game; no-game case exits 1 with typed ConnectionError guidance. Exercises /health, /scene/current, /node/<path> (shape-key check), /node/<path>/property/name, typed-error path (NODE_NOT_FOUND 404), /state (200 or 409 STATE_AUTOLOAD_MISSING both valid). Uses ONLY @godriver/core public API (connect/request/health/close + DriverError/ConnectionError). Findings: (1) examples/ sits OUTSIDE the js/ npm workspace — package-name import fails ERR_MODULE_NOT_FOUND; smoke imports ../js/core/src/client.js relatively (zero-install; undici still resolves from js/core's node_modules). (2) Node reports node.name as StringName (§4 serializes as string) — property type check accepts String|StringName. (3) undici agent.destroy() + immediate process exit trips a libuv assertion on Windows (uv_async closing race, exit -1073740791) — 50ms settle after close fixes it. README quickstart: js/core/README.md gained "Quickstart (runnable)" section linking the script (also fixed stale types.test.d.ts → types.test.ts reference). CI wiring in GTD-042.
 ---
 
 # GTD-018 · Smoke: Node script queries a running game

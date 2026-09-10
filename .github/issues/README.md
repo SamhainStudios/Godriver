@@ -21,10 +21,17 @@ File-based backlog, the source of truth for implementation. Pattern borrowed fro
 | 014 | `GET /node?test_id=x` + `GET /nodes?group=y`                 | S    | 1     | 013        |
 | 015 | `/scene/current` + `/state` + `/input/map`                   | S    | 1     | 013        |
 | 016 | `/reset` (atomic)                                            | S    | 1     | 015        |
-| 017 | `@godriver/core` skeleton (fetch wrapper)                    | S    | 1     | 011        |
-| 018 | Smoke: Node script queries a running game                    | XS   | 1     | 013–017    |
+| 017 | `@godriver/core` skeleton (fetch wrapper)                    | S    | 1     | 011        | DONE   |
+| 018 | Smoke: Node script queries a running game                    | XS   | 1     | 013–017    | DONE   |
+| 020 | `POST /input/click` — targeted mouse injection               | S    | 2     | 014        | DONE   |
+| 021 | `POST /input/type` + `POST /input/key`                       | S    | 2     | 020        | DONE   |
+| 022 | 4.7 device-ID + joypad-focus compatibility                   | XS   | 2     | 021        | DONE   |
+| 023 | `POST /scene/load` — readiness semantics                     | S    | 2     | 016        | DONE   |
+| 024 | `GET /assets/loaded` — resource inventory                    | S    | 2     | 015        | DONE   |
+| 025 | `GET /ui/layout/<path>` — Control geometry                   | S    | 2     | 013        | DONE   |
+| 026 | JS client: input + scene methods (auto-wait)                 | S    | 2     | 017, 020–023 | DONE   |
 
-Phase 2–6 briefs (020+) are written when the phase approaches; the full task breakdown lives in [ROADMAP.md](../../ROADMAP.md).
+Phase 3–6 briefs (030+) are written when the phase approaches; the full task breakdown lives in [ROADMAP.md](../../ROADMAP.md).
 
 ## Dependency graph
 
@@ -45,8 +52,14 @@ Phase 2–6 briefs (020+) are written when the phase approaches; the full task b
   |      \
 012 (dispatcher) 013 (node) -- 014 (test_id/group) -- 015 (scene/state/inputmap) -- 016 (reset)
   |                                                                    |
-  |                              020+ (Phase 2: input & scene — briefs pending)
+  |                              020 (click) -- 021 (type/key) -- 022 (device compat)
+  |                                |              \
+  |                                |               026 (js input+scene)
+  |                                023 (scene/load) ----------------/
+  |              024 (assets)      025 (ui/layout)
 ```
+
+Phase 1 rows marked DONE; Phase 2 briefs (020–026) written, ready to seed.
 
 ## Rules
 

@@ -12,4 +12,4 @@ config/features=PackedStringArray("4.7")
 
 Godriver="*res://addons/godriver/driver.gd"
 SpikeServer="*res://scratch/spike/scripts/spike_server.gd"
-Dispatcher="*res://scratch/spike/scripts/dispatcher.gd"
+Dispatcher="*res://addons/godriver/dispatcher.gd"

@@ -1,7 +1,7 @@
-class_name SpikeSerializer
+class_name TestDriverSerializer
 ## JSON <-> Variant mapping per SPEC §4 (frozen shapes).
-## Spike-scoped: covers the types listed in the GTD-007 brief plus the full
-## frozen math-type set. Object/Node/Callable/Signal are unsupported in v0.1.
+## Canonical §4 implementation (GTD-007 property tests, GTD-013+ handlers).
+## Object/Node/Callable/Signal are unsupported in v0.1.
 ##
 ## encode(v) -> JSON-ready Variant (dicts/arrays/numbers/strings/bools/null)
 ## decode(v, type) -> Variant   (type = the declared target Variant.Type;
@@ -90,7 +90,7 @@ static func encode(v: Variant) -> Variant:
 			return out
 		_:
 			# Object/Node/Callable/Signal etc. -> unsupported in v0.1 (SPEC §4).
-			push_error("SpikeSerializer: unsupported type %d" % typeof(v))
+			push_error("TestDriverSerializer: unsupported type %d" % typeof(v))
 			return null
 
 

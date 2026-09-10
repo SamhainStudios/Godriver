@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## Round-trip path: encode -> JSON.stringify -> JSON.parse -> decode(target type)
 ## and assert semantic equality (never byte equality — SPEC §4 NodePath note).
 
-const Serializer := preload("res://scratch/spike/scripts/serializer.gd")
+const Serializer := preload("res://addons/godriver/serializer.gd")
 
 
 func _roundtrip(v: Variant, type: int) -> Variant:
