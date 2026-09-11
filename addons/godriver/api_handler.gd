@@ -48,6 +48,8 @@ var routes := {
 	"/input/type": {"post": "input_type"},
 	"/input/key": {"post": "input_key"},
 	"/state": {"get": "state"},
+	"/state/schema": {"get": "state_schema", "post": "state_schema"},
+	"/state/set": {"post": "state_set"},
 	# GTD-024: GET /assets/loaded (SPEC §5.9a).
 	"/assets/loaded": {"get": "assets_loaded"},
 	# GTD-016: /reset is ASYNC (main-thread coroutine + worker-side slot
@@ -134,7 +136,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property":
+		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -276,9 +278,19 @@ func _main_input_key(args: Dictionary) -> Dictionary:
 	return TestDriverInputHandler.key(get_tree(), args)
 
 
-## GET /state (GTD-015, SPEC §5.8) — read-only; writes are Phase 2 (GTD-032).
-func _main_state(_args: Dictionary) -> Dictionary:
-	return TestDriverStateHandler.read_state(get_tree())
+## GET /state (GTD-015/033, SPEC §5.8).
+func _main_state(args: Dictionary) -> Dictionary:
+	return TestDriverStateHandler.read_state(get_tree(), args)
+
+
+## GET/POST /state/schema (GTD-033, SPEC §5.8).
+func _main_state_schema(args: Dictionary) -> Dictionary:
+	return TestDriverStateHandler.get_schema(get_tree(), args)
+
+
+## POST /state/set (GTD-033, SPEC §5.8/§8).
+func _main_state_set(args: Dictionary) -> Dictionary:
+	return TestDriverStateHandler.set_state(get_tree(), args)
 
 
 ## GET /assets/loaded (GTD-024, SPEC §5.9a).

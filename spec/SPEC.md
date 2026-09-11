@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 16)
+Version: 0.1 (draft, rev 17)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -459,31 +459,34 @@ Evaluates an arbitrary node property value against an expected Variant value.
 
 **Documented with their implementing briefs (Phase 2).** Implementation note frozen here: `/wait/frames` awaits `get_tree().process_frame` N times; NEVER `Timer`s, `SceneTreeTimer`s, or thread sleeps, which are subject to `time_scale`/pause and would break the wait's own semantics. `process_frame` is also the pause-safe choice: the signal keeps ticking while `get_tree().paused = true` (the dispatcher runs with `PROCESS_MODE_ALWAYS`), whereas reliance on `physics_frame` under pause is not guaranteed across engine versions — frame-wait operations MUST advance via `process_frame` only.
 
-### 5.8 State
+### 5.8 State (`GET /state`, `GET /state/schema`, `POST /state/set`)
+
+State inspection and property mutation for state autoloads, scene tree nodes, or Resource instances (§8).
 
 #### `GET /state`
 
-Read the configured state autoload's script-declared properties (§8 discovery: project setting `godriver/state_autoload`, default `GameState`).
+Read script-declared properties from the state autoload or specified target object (§8).
 
-- Params: none (the optional `target` expansion is part of `/state/set` + `/state/schema`, Phase 3)
-- Response schema:
+- Params/Query: `?target=<node_path_or_resource_path>` (optional; default = configured state autoload).
+- Response: `200 {"ok": true, "data": {"autoload": "GameState", "values": {"player_life": 3, "level_name": "intro"}}}` (or `"target": "<path>"` when target is supplied).
+- Errors: `404 TARGET_NOT_FOUND`, `409 STATE_AUTOLOAD_MISSING`.
 
-```json
-{ "ok": true, "data": { "autoload": "GameState", "values": { "player_life": 3, "level_name": "intro" } } }
-```
+#### `GET /state/schema` / `POST /state/schema`
 
-- `values` = flat map of script-declared variables (`SCRIPT_VARIABLES`-style members exposed via `get_property_list()` with `usage` script-flags) → current values serialized per §4. Engine built-ins are excluded.
-- Status codes: `200`, `409 STATE_AUTOLOAD_MISSING` (no state autoload configured; `details` carries the configuration hint)
-- Timing: synchronous.
-- curl:
+Read script-declared property type declarations and values from the state autoload or specified target object.
 
-```bash
-curl http://127.0.0.1:9090/state
-```
+- Query/Body: `{"target": "<node_path_or_resource_path>"}` (optional).
+- Response: `200 {"ok": true, "data": {"autoload": "GameState", "properties": [{"name": "player_life", "type": "int", "value": 3}]}}`
+- Errors: `404 TARGET_NOT_FOUND`, `409 STATE_AUTOLOAD_MISSING`.
 
-#### `POST /state/set`, `GET /state/schema`
+#### `POST /state/set`
 
-**Documented with their implementing briefs (Phase 2/3).** Coercion rules, null-write semantics, and target expansion are frozen in §8.
+Mutate script-declared properties on the state autoload or specified target object using SPEC §8 coercion rules.
+
+- Body: `{"values": {"player_life": 100, "player_name": "Hero"}, "target": "<node_path_or_resource_path>"}` (`target` optional).
+- Coercion & Validation: JSON values are coerced to declared property types per §8. Null writes are allowed for nullable types (`Object`, `Resource`, `Variant`) and rejected (`400 NULL_NOT_ALLOWED`) for value types.
+- Response: `200 {"ok": true, "data": {"autoload": "GameState", "updated": ["player_life", "player_name"]}}`
+- Errors: `400 MISSING_PARAM`, `400 UNKNOWN_KEY`, `400 TYPE_MISMATCH`, `400 NULL_NOT_ALLOWED`, `404 TARGET_NOT_FOUND`, `409 STATE_AUTOLOAD_MISSING`.
 
 ### 5.9 Determinism (`/dev/seed`, `/dev/time_scale`, `/dev/pause`, `/dev/save/load`)
 
@@ -686,4 +689,5 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 14)** — `POST /input/click` expanded to `CollisionObject2D` targets (GTD-030): §5.3 updated (supports Area2D/CollisionObject2D hotspots via physics picking; shape-geometry click points; response includes `mode: "gui" | "picking"`; new Appendix A error `400 PICKING_DISABLED` when target viewport has picking off; root Window sends `notify_mouse_entered()` to ensure `gui.mouse_in_viewport` is established before `_process_picking` runs).
 - **0.1 (draft, rev 15)** — Signal observation and waiting implemented (GTD-031): §5.5 filled (`POST /signal/watch`, `GET /signal/poll`, `POST /signal/wait` / `GET /signal/wait`). Thread-safe emission buffer; signal watcher registration runs on main thread (godot#117396); worker long-polling bounded to `MAX_BLOCKED_WAITS = 8` (§6.1); `/reset` clears watchers and emissions; new Appendix A error `400 SIGNAL_NOT_FOUND`.
 - **0.1 (draft, rev 16)** — Server-side assertion endpoints implemented (GTD-032): §5.6 filled (`POST /assert/visible`, `POST /assert/enabled`, `POST /assert/property`). Evaluates target state on main thread; assertion mismatches return HTTP 200 with `passed: false` (not HTTP 500 error envelope).
+- **0.1 (draft, rev 17)** — State mutation and schema discovery implemented (GTD-033): §5.8 filled (`GET /state`, `GET/POST /state/schema`, `POST /state/set`). Supports target expansion (nodes & Resources) and SPEC §8 coercion rules + null-write type enforcement.
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.
