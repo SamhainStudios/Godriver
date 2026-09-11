@@ -45,6 +45,8 @@ static func reset(tree: SceneTree, tween_mode: String, done: Callable) -> void:
 		"code": 200,
 		"body": {"ok": true, "data": {"reloaded_scene": "", "scene_ready": true}},
 	}
+	# Steps 1–2: disconnect signal watchers & unblock pending waits (GTD-031).
+	TestDriverSignalHandler.clear_all()
 	# Step 3: determinism state.
 	Engine.time_scale = 1.0
 	tree.paused = false

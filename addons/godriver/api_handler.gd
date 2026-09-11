@@ -57,6 +57,10 @@ var routes := {
 	# GTD-026: GET /wait/frames?frames=N (SPEC §5.7) — long-poll; the worker
 	# blocks until N process_frames elapse (pause-safe; never timers/sleeps).
 	"/wait/frames": {"get": "wait_frames"},
+	# GTD-031: /signal/watch, /signal/poll, /signal/wait (SPEC §5.5).
+	"/signal/watch": {"post": "signal_watch"},
+	"/signal/poll": {"get": "signal_poll", "post": "signal_poll"},
+	"/signal/wait": {"get": "signal_wait", "post": "signal_wait"},
 }
 
 # --- /wait/frames state (GTD-026, SPEC §5.7) ---
@@ -67,8 +71,8 @@ var _frames := 0
 ## Long-poll concurrency cap (SPEC §6.1): Mutex-guarded count of workers
 ## currently blocked in /wait/frames; over the cap → 503 SERVER_BUSY.
 const MAX_BLOCKED_WAITS := 8
-var _blocked_waits := 0
-var _blocked_waits_mutex := Mutex.new()
+static var _blocked_waits := 0
+static var _blocked_waits_mutex := Mutex.new()
 
 
 func _process(_delta: float) -> void:
@@ -134,6 +138,17 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			if body is Dictionary:
 				return body
 			return {}
+		"signal_watch", "signal_poll", "signal_wait":
+			var res_dict := {}
+			var body: Variant = req.get_body_parsed()
+			if not (body is Dictionary) and not String(req.body).is_empty():
+				body = JSON.parse_string(String(req.body))
+			if body is Dictionary:
+				for k in body:
+					res_dict[k] = body[k]
+			for k in req.query:
+				res_dict[k] = req.query[k]
+			return res_dict
 		_:
 			return {}
 
@@ -151,6 +166,8 @@ func dispatch(handler_name: String, req: HttpRequest, res: HttpResponse) -> bool
 		return _dispatch_scene_load(req, res)
 	if handler_name == "wait_frames":
 		return _dispatch_wait_frames(req, res)
+	if handler_name == "signal_wait":
+		return _dispatch_signal_wait(req, res)
 	var args := _extract_args(handler_name, req)
 	var result: Variant = dispatcher.submit(Callable(self, "_main_" + handler_name).bind(args))
 	if result is Dictionary and result.has("code") and result.has("body"):
@@ -439,3 +456,75 @@ func _start_scene_load(path: String, slot: Dictionary, slot_mutex: Mutex) -> Dic
 		slot.result = result
 		slot_mutex.unlock())
 	return {"code": 200, "body": {}}
+
+
+# --- GTD-031 Signal Endpoints (SPEC §5.5) ---
+
+func _main_signal_watch(args: Dictionary) -> Dictionary:
+	return TestDriverSignalHandler.watch(get_tree(), args)
+
+
+func _main_signal_poll(args: Dictionary) -> Dictionary:
+	return TestDriverSignalHandler.poll(args)
+
+
+func _dispatch_signal_wait(req: HttpRequest, res: HttpResponse) -> bool:
+	var args := _extract_args("signal_wait", req)
+	var signal_name := str(args.get("signal", ""))
+	if signal_name.is_empty():
+		res.json(400, {"ok": false, "error": {"code": "MISSING_PARAM", "message": "missing required parameter 'signal'"}})
+		return true
+
+	var target_path := str(args.get("path", ""))
+	var test_id := str(args.get("test_id", ""))
+
+	# If target_path is missing but test_id is present, resolve it on the main thread
+	if target_path.is_empty() and not test_id.is_empty():
+		var resolved: Variant = dispatcher.submit(Callable(TestDriverInputHandler, "resolve_target").bind(get_tree().root, args))
+		if resolved is Dictionary:
+			if not resolved.get("ok", false):
+				res.json(int(resolved.get("code", 400)), {"ok": false, "error": resolved.get("error", {})})
+				return true
+			target_path = str(resolved.get("path", ""))
+
+	_blocked_waits_mutex.lock()
+	if _blocked_waits >= MAX_BLOCKED_WAITS:
+		_blocked_waits_mutex.unlock()
+		res.json(503, {"ok": false, "error": {"code": "SERVER_BUSY", "message": "max blocked waits (%d) reached" % MAX_BLOCKED_WAITS}})
+		return true
+	_blocked_waits += 1
+	_blocked_waits_mutex.unlock()
+
+	var min_seq := TestDriverSignalHandler.get_current_seq()
+	var timeout_sec := float(args.get("timeout", 5.0))
+	if timeout_sec <= 0.0:
+		timeout_sec = 5.0
+	if timeout_sec > 30.0:
+		timeout_sec = 30.0
+
+	var deadline := Time.get_ticks_msec() + int(timeout_sec * 1000.0)
+	var final_status := {"code": 200, "body": {"ok": true, "data": {"signaled": false, "timed_out": true}}}
+
+	while Time.get_ticks_msec() < deadline:
+		var st := TestDriverSignalHandler.check_wait_status(target_path, signal_name, min_seq)
+		if st.get("status", "") == "found":
+			final_status = {
+				"code": 200,
+				"body": {"ok": true, "data": {"signaled": true, "emission": st.get("emission")}}
+			}
+			break
+		elif st.get("status", "") == "reset":
+			final_status = {
+				"code": 200,
+				"body": {"ok": true, "data": {"signaled": false, "reset": true}}
+			}
+			break
+		OS.delay_msec(25)
+
+	_blocked_waits_mutex.lock()
+	_blocked_waits -= 1
+	_blocked_waits_mutex.unlock()
+
+	res.json(int(final_status.code), final_status.body)
+	return true
+
