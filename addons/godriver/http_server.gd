@@ -17,6 +17,7 @@ var _api: TestDriverApi
 
 
 func setup(port: int, token: String, dispatcher: TestDriverDispatcher = null) -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_api = TestDriverApi.new()
 	_api.token = token
 	if dispatcher != null:

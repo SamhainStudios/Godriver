@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 17)
+Version: 0.1 (draft, rev 18)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -488,9 +488,41 @@ Mutate script-declared properties on the state autoload or specified target obje
 - Response: `200 {"ok": true, "data": {"autoload": "GameState", "updated": ["player_life", "player_name"]}}`
 - Errors: `400 MISSING_PARAM`, `400 UNKNOWN_KEY`, `400 TYPE_MISMATCH`, `400 NULL_NOT_ALLOWED`, `404 TARGET_NOT_FOUND`, `409 STATE_AUTOLOAD_MISSING`.
 
-### 5.9 Determinism (`/dev/seed`, `/dev/time_scale`, `/dev/pause`, `/dev/save/load`)
+### 5.9 Determinism (`POST /dev/seed`, `POST /dev/time_scale`, `POST /dev/pause`, `POST /dev/save/load`)
 
-**Documented with their implementing briefs (Phase 3).** Semantics frozen in §9.
+Game determinism and environment control (§9).
+
+#### `POST /dev/seed`
+
+Seeds the global RNG sequence (`seed(N)`).
+
+- Body: `{"seed": <int>}`.
+- Response: `200 {"ok": true, "data": {"seeded": true, "seed": <int>}}`.
+- Errors: `400 MISSING_PARAM`, `400 TYPE_MISMATCH`.
+
+#### `POST /dev/time_scale`
+
+Sets `Engine.time_scale`.
+
+- Body: `{"scale": <float>}` (`scale` bounded to 0.0..1000.0).
+- Response: `200 {"ok": true, "data": {"time_scale": <float>}}`.
+- Errors: `400 MISSING_PARAM`, `400 TYPE_MISMATCH`.
+
+#### `POST /dev/pause`
+
+Toggles `SceneTree.paused` state.
+
+- Body: `{"enabled": <bool>}`.
+- Response: `200 {"ok": true, "data": {"paused": <bool>}}`.
+- Errors: `400 MISSING_PARAM`, `400 TYPE_MISMATCH`.
+
+#### `POST /dev/save/load`
+
+Loads or copies a save slot file at `user://<slot>.save` or `res://fixtures/<slot>.save`.
+
+- Body: `{"slot": "<slot_name>"}`.
+- Response: `200 {"ok": true, "data": {"slot": "<name>", "loaded": true, "path": "user://<slot>.save"}}`.
+- Errors: `400 MISSING_PARAM`, `404 FILE_NOT_FOUND`.
 
 ### 5.9a Assets (`/assets/loaded`)
 
@@ -690,4 +722,5 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 15)** — Signal observation and waiting implemented (GTD-031): §5.5 filled (`POST /signal/watch`, `GET /signal/poll`, `POST /signal/wait` / `GET /signal/wait`). Thread-safe emission buffer; signal watcher registration runs on main thread (godot#117396); worker long-polling bounded to `MAX_BLOCKED_WAITS = 8` (§6.1); `/reset` clears watchers and emissions; new Appendix A error `400 SIGNAL_NOT_FOUND`.
 - **0.1 (draft, rev 16)** — Server-side assertion endpoints implemented (GTD-032): §5.6 filled (`POST /assert/visible`, `POST /assert/enabled`, `POST /assert/property`). Evaluates target state on main thread; assertion mismatches return HTTP 200 with `passed: false` (not HTTP 500 error envelope).
 - **0.1 (draft, rev 17)** — State mutation and schema discovery implemented (GTD-033): §5.8 filled (`GET /state`, `GET/POST /state/schema`, `POST /state/set`). Supports target expansion (nodes & Resources) and SPEC §8 coercion rules + null-write type enforcement.
+- **0.1 (draft, rev 18)** — Determinism endpoints implemented (GTD-034): §5.9 filled (`POST /dev/seed`, `POST /dev/time_scale`, `POST /dev/pause`, `POST /dev/save/load`). Global RNG seeding, Engine time_scale, SceneTree pause toggle, save file slot verification.
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

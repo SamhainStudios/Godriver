@@ -13,6 +13,10 @@ extends Node
 ## A handler that crashes (script error → null result) or returns anything
 ## else is funneled to a 500 INTERNAL_ERROR envelope — the server stays up.
 
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
 const TestDriverAssertionHandler := preload("res://addons/godriver/handlers/assertion_handler.gd")
 
 const SPEC_VERSION := "0.1"
@@ -69,6 +73,11 @@ var routes := {
 	"/assert/visible": {"post": "assert_visible"},
 	"/assert/enabled": {"post": "assert_enabled"},
 	"/assert/property": {"post": "assert_property"},
+	# GTD-034: /dev/seed, /dev/time_scale, /dev/pause, /dev/save/load (SPEC §5.9).
+	"/dev/seed": {"post": "dev_seed"},
+	"/dev/time_scale": {"post": "dev_time_scale"},
+	"/dev/pause": {"post": "dev_pause"},
+	"/dev/save/load": {"post": "dev_save_load"},
 }
 
 # --- /wait/frames state (GTD-026, SPEC §5.7) ---
@@ -136,7 +145,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set":
+		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -291,6 +300,26 @@ func _main_state_schema(args: Dictionary) -> Dictionary:
 ## POST /state/set (GTD-033, SPEC §5.8/§8).
 func _main_state_set(args: Dictionary) -> Dictionary:
 	return TestDriverStateHandler.set_state(get_tree(), args)
+
+
+## POST /dev/seed (GTD-034, SPEC §5.9/§9).
+func _main_dev_seed(args: Dictionary) -> Dictionary:
+	return TestDriverDevHandler.seed_rng(args)
+
+
+## POST /dev/time_scale (GTD-034, SPEC §5.9/§9).
+func _main_dev_time_scale(args: Dictionary) -> Dictionary:
+	return TestDriverDevHandler.set_time_scale(args)
+
+
+## POST /dev/pause (GTD-034, SPEC §5.9/§9).
+func _main_dev_pause(args: Dictionary) -> Dictionary:
+	return TestDriverDevHandler.set_pause(get_tree(), args)
+
+
+## POST /dev/save/load (GTD-034, SPEC §5.9/§9).
+func _main_dev_save_load(args: Dictionary) -> Dictionary:
+	return TestDriverDevHandler.save_load(args)
 
 
 ## GET /assets/loaded (GTD-024, SPEC §5.9a).
