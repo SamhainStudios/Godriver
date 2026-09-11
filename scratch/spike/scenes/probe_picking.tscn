@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://probe0picking"]
+
+[ext_resource type="Script" path="res://scratch/spike/scripts/probe_picking.gd" id="1"]
+
+[node name="ProbePicking" type="Node"]
+script = ExtResource("1")
+

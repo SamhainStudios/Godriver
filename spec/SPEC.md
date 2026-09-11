@@ -1,9 +1,9 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 13)
+Version: 0.1 (draft, rev 14)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
-       implements against this document and nothing else.
+implements against this document and nothing else.
 
 ---
 
@@ -25,13 +25,13 @@ Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 Success (every endpoint, every 2xx):
 
 ```json
-{ "ok": true, "data": { } }
+{ "ok": true, "data": {} }
 ```
 
 Error (every endpoint, every 4xx/5xx):
 
 ```json
-{ "ok": false, "error": { "code": "UNKNOWN_KEY", "message": "human-readable", "details": { } } }
+{ "ok": false, "error": { "code": "UNKNOWN_KEY", "message": "human-readable", "details": {} } }
 ```
 
 - `code` is a stable machine-readable string (Appendix A). Never repurposed.
@@ -41,16 +41,16 @@ Error (every endpoint, every 4xx/5xx):
 
 ## 3. Status Code Contract
 
-| Code | Meaning | When it fires |
-| ---- | ------- | ------------- |
-| 200  | OK      | request handled; see envelope |
-| 400  | Bad request | malformed JSON, unknown key, type mismatch, unsupported Variant type |
-| 401  | Unauthorized | token configured but missing/incorrect |
-| 404  | Not found | node path / test_id / scene / property does not exist |
-| 409  | Conflict | state autoload missing, ambiguous test_id |
-| 503  | Server busy | concurrent blocked-wait limit exceeded |
+| Code | Meaning         | When it fires                                                                         |
+| ---- | --------------- | ------------------------------------------------------------------------------------- |
+| 200  | OK              | request handled; see envelope                                                         |
+| 400  | Bad request     | malformed JSON, unknown key, type mismatch, unsupported Variant type                  |
+| 401  | Unauthorized    | token configured but missing/incorrect                                                |
+| 404  | Not found       | node path / test_id / scene / property does not exist                                 |
+| 409  | Conflict        | state autoload missing, ambiguous test_id                                             |
+| 503  | Server busy     | concurrent blocked-wait limit exceeded                                                |
 | 504  | Gateway timeout | `/reset` scene-readiness wait exceeded its bound (engine hang or async-loading scene) |
-| 500  | Internal | unhandled server error (bug) |
+| 500  | Internal        | unhandled server error (bug)                                                          |
 
 - Rule: node not found → `404 NODE_NOT_FOUND`; malformed path syntax → `400 BAD_PATH`; node exists but property missing → `404 PROPERTY_NOT_FOUND`.
 - Rule: state-autoload unknown key → `400 UNKNOWN_KEY` with valid keys in `details`.
@@ -59,32 +59,32 @@ Error (every endpoint, every 4xx/5xx):
 
 **⚠ Divergence-prone. Be pedantic. These shapes are frozen; never change them.**
 
-| Godot type    | JSON shape            | Notes / edge cases |
-| ------------- | --------------------- | ------------------ |
-| null          | `null`                | Distinguishable from missing key: property absent → `404 PROPERTY_NOT_FOUND`; property present with null → `200 {"value": null}`. As a **write** target, null is type-dependent (§8): allowed for `Object`/`Resource`-typed and untyped (`Variant`) properties — the idiomatic clear; rejected (`400 NULL_NOT_ALLOWED`) for value types (int/float/bool/String/Vector*/Color/NodePath) |
-| bool          | `true` / `false`      | |
-| int           | number                | 64-bit; JS clients: precision guaranteed only to 2^53 |
-| float         | number                | NaN/Inf serialize as strings `"NaN"`, `"Infinity"`, `"-Infinity"` (JSON has no literals) |
-| String        | string                | |
-| StringName    | string                | no distinction on the wire |
-| NodePath      | string                | serialized verbatim: `/root/...` absolute, `res://...` resource, relative stays relative — no conversion. **Known engine limitation (Godot 4.7, godot#116104)**: binary serialization of `NodePath` is not byte-deterministic (padding bytes from uninitialized memory). Round-trip guarantees hold at the **semantic** level, not the byte level — clients must not hash/compare raw serialized bytes. |
-| Object/Node   | string (node path)    | absolute path from `/root` (e.g. `/root/Main/UI/Button`). Never a live reference. NOT round-trippable: writing an object value → `400 UNSUPPORTED_TYPE` |
-| Array         | array                 | typed arrays (`Array[int]`) serialize as plain arrays — typed-ness is lost on read and not restored on write |
-| Dictionary    | object                | non-string keys stringified (`3` → `"3"`) — lossy, documented |
-| Vector2       | `{"x":..,"y":..}`     | object shape, frozen (not arrays) |
-| Vector3       | `{"x":..,"y":..,"z":..}` | |
-| Vector4       | `{"x":..,"y":..,"z":..,"w":..}` | |
-| Color         | `{"r":..,"g":..,"b":..,"a":..}` | 0–1 floats |
-| Vector2i/3i/4i | `{"x":..,...}`        | integer components, same object shapes as the float vectors |
-| Rect2          | `{"x":..,"y":..,"w":..,"h":..}` | flat wire shape (brevity); required by `/ui/layout` |
-| Rect2i         | `{"x":..,"y":..,"w":..,"h":..}` | integer components |
-| Quaternion     | `{"x":..,"y":..,"z":..,"w":..}` | explicit component names — prevents XYZW/WXYZ ordering bugs in clients |
-| Basis          | `{"x":{"x":..,"y":..,"z":..},"y":{...},"z":{...}}` | column vectors as named objects |
-| Transform2D    | `{"x":{"x":..,"y":..},"y":{...},"origin":{"x":..,"y":..}}` | basis columns + origin, all named objects |
-| Transform3D    | `{"basis":{"x":{...},"y":{...},"z":{...}},"origin":{"x":..,"y":..,"z":..}}` | basis columns + origin, all named objects |
-| AABB           | `{"position":{...},"size":{...}}` | Vector3 components |
-| Plane          | `{"normal":{...},"d":..}` | |
-| Callable/Signal | —                   | **unsupported in v0.1** → `400 UNSUPPORTED_TYPE` |
+| Godot type      | JSON shape                                                                  | Notes / edge cases                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| null            | `null`                                                                      | Distinguishable from missing key: property absent → `404 PROPERTY_NOT_FOUND`; property present with null → `200 {"value": null}`. As a **write** target, null is type-dependent (§8): allowed for `Object`/`Resource`-typed and untyped (`Variant`) properties — the idiomatic clear; rejected (`400 NULL_NOT_ALLOWED`) for value types (int/float/bool/String/Vector\*/Color/NodePath)                 |
+| bool            | `true` / `false`                                                            |                                                                                                                                                                                                                                                                                                                                                                                                         |
+| int             | number                                                                      | 64-bit; JS clients: precision guaranteed only to 2^53                                                                                                                                                                                                                                                                                                                                                   |
+| float           | number                                                                      | NaN/Inf serialize as strings `"NaN"`, `"Infinity"`, `"-Infinity"` (JSON has no literals)                                                                                                                                                                                                                                                                                                                |
+| String          | string                                                                      |                                                                                                                                                                                                                                                                                                                                                                                                         |
+| StringName      | string                                                                      | no distinction on the wire                                                                                                                                                                                                                                                                                                                                                                              |
+| NodePath        | string                                                                      | serialized verbatim: `/root/...` absolute, `res://...` resource, relative stays relative — no conversion. **Known engine limitation (Godot 4.7, godot#116104)**: binary serialization of `NodePath` is not byte-deterministic (padding bytes from uninitialized memory). Round-trip guarantees hold at the **semantic** level, not the byte level — clients must not hash/compare raw serialized bytes. |
+| Object/Node     | string (node path)                                                          | absolute path from `/root` (e.g. `/root/Main/UI/Button`). Never a live reference. NOT round-trippable: writing an object value → `400 UNSUPPORTED_TYPE`                                                                                                                                                                                                                                                 |
+| Array           | array                                                                       | typed arrays (`Array[int]`) serialize as plain arrays — typed-ness is lost on read and not restored on write                                                                                                                                                                                                                                                                                            |
+| Dictionary      | object                                                                      | non-string keys stringified (`3` → `"3"`) — lossy, documented                                                                                                                                                                                                                                                                                                                                           |
+| Vector2         | `{"x":..,"y":..}`                                                           | object shape, frozen (not arrays)                                                                                                                                                                                                                                                                                                                                                                       |
+| Vector3         | `{"x":..,"y":..,"z":..}`                                                    |                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Vector4         | `{"x":..,"y":..,"z":..,"w":..}`                                             |                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Color           | `{"r":..,"g":..,"b":..,"a":..}`                                             | 0–1 floats                                                                                                                                                                                                                                                                                                                                                                                              |
+| Vector2i/3i/4i  | `{"x":..,...}`                                                              | integer components, same object shapes as the float vectors                                                                                                                                                                                                                                                                                                                                             |
+| Rect2           | `{"x":..,"y":..,"w":..,"h":..}`                                             | flat wire shape (brevity); required by `/ui/layout`                                                                                                                                                                                                                                                                                                                                                     |
+| Rect2i          | `{"x":..,"y":..,"w":..,"h":..}`                                             | integer components                                                                                                                                                                                                                                                                                                                                                                                      |
+| Quaternion      | `{"x":..,"y":..,"z":..,"w":..}`                                             | explicit component names — prevents XYZW/WXYZ ordering bugs in clients                                                                                                                                                                                                                                                                                                                                  |
+| Basis           | `{"x":{"x":..,"y":..,"z":..},"y":{...},"z":{...}}`                          | column vectors as named objects                                                                                                                                                                                                                                                                                                                                                                         |
+| Transform2D     | `{"x":{"x":..,"y":..},"y":{...},"origin":{"x":..,"y":..}}`                  | basis columns + origin, all named objects                                                                                                                                                                                                                                                                                                                                                               |
+| Transform3D     | `{"basis":{"x":{...},"y":{...},"z":{...}},"origin":{"x":..,"y":..,"z":..}}` | basis columns + origin, all named objects                                                                                                                                                                                                                                                                                                                                                               |
+| AABB            | `{"position":{...},"size":{...}}`                                           | Vector3 components                                                                                                                                                                                                                                                                                                                                                                                      |
+| Plane           | `{"normal":{...},"d":..}`                                                   |                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Callable/Signal | —                                                                           | **unsupported in v0.1** → `400 UNSUPPORTED_TYPE`                                                                                                                                                                                                                                                                                                                                                        |
 
 - **Round-trip guarantee**: read → write → read is lossless for all supported types (modulo documented losses: typed arrays, non-string dict keys).
 - **Unsupported types**: reject with `400 UNSUPPORTED_TYPE`. Never silently coerce.
@@ -168,15 +168,21 @@ The registered `InputMap` actions — the contract clients need to drive `/input
 - Response schema:
 
 ```json
-{ "ok": true, "data": { "actions": [
-  { "name": "jump", "events": [
-    { "type": "key", "keycode": 87, "physical_keycode": 0, "device": 16 }
-  ] },
-  { "name": "fire", "events": [
-    { "type": "mouse_button", "button_index": 1, "device": 32 },
-    { "type": "joypad_button", "button_index": 0, "device": 0 }
-  ] }
-] } }
+{
+  "ok": true,
+  "data": {
+    "actions": [
+      { "name": "jump", "events": [{ "type": "key", "keycode": 87, "physical_keycode": 0, "device": 16 }] },
+      {
+        "name": "fire",
+        "events": [
+          { "type": "mouse_button", "button_index": 1, "device": 32 },
+          { "type": "joypad_button", "button_index": 0, "device": 0 }
+        ]
+      }
+    ]
+  }
+}
 ```
 
 - Event shapes: `type` is the snake-cased `InputEvent` subclass. Well-known fields are extracted when present: `key` → `keycode`, `physical_keycode`, `device`; `mouse_button` → `button_index`, `device`; `joypad_button` → `button_index`, `device`; `joypad_motion` → `axis`, `axis_value`, `device`. Any other event type serializes as `{"type": "<class>"}` only (extensible additively; clients must tolerate unknown fields).
@@ -207,7 +213,15 @@ curl http://127.0.0.1:9090/ui/layout/root/Main/Button?depth=1
 All node-query endpoints are synchronous reads dispatched to the main thread (§6). Node summaries share one shape:
 
 ```json
-{ "path": "/root/Main/Button", "name": "Button", "type": "Button", "test_id": "start_button", "child_count": 0, "children": [], "script": null }
+{
+  "path": "/root/Main/Button",
+  "name": "Button",
+  "type": "Button",
+  "test_id": "start_button",
+  "child_count": 0,
+  "children": [],
+  "script": null
+}
 ```
 
 - `type` = `node.get_class()`. `test_id` = the node's `test_id` metadata (§7) or `null`. `children` = child names in tree order. `script` = resource path of the attached script or `null`.
@@ -273,9 +287,23 @@ All nodes in a `SceneTree` group — collections are exempt from ambiguity error
 - Response schema:
 
 ```json
-{ "ok": true, "data": { "nodes": [
-  { "path": "/root/Main/Enemy1", "name": "Enemy1", "type": "Area2D", "test_id": null, "child_count": 2, "children": ["Sprite", "Collision"], "script": "res://enemy.gd" }
-], "meta": { "total": 27, "limit": 100, "offset": 0 } } }
+{
+  "ok": true,
+  "data": {
+    "nodes": [
+      {
+        "path": "/root/Main/Enemy1",
+        "name": "Enemy1",
+        "type": "Area2D",
+        "test_id": null,
+        "child_count": 2,
+        "children": ["Sprite", "Collision"],
+        "script": "res://enemy.gd"
+      }
+    ],
+    "meta": { "total": 27, "limit": 100, "offset": 0 }
+  }
+}
 ```
 
 - `meta.total` = full match count before pagination; page with `?limit=&offset=` until `offset >= total`.
@@ -291,12 +319,14 @@ curl "http://127.0.0.1:9090/nodes?group=enemies&limit=100&offset=0"
 
 #### `POST /input/click`
 
-Inject a left-click at the center of a target Control. **200 = injected only** (§6 timing contract): the events are queued into the target's owning viewport; effects (e.g. a `pressed` signal) land on the next engine tick. Auto-wait is client-side.
+Inject a left-click at the center of a target Control (GUI path) or CollisionObject2D (physics-picking path, e.g. Area2D hotspot). **200 = injected only** (§6 timing contract): the events are queued into the target's owning viewport; effects (e.g. a `pressed` or `input_event` signal) land on the next engine tick / physics frame. Auto-wait is client-side.
 
 - Body: exactly one of `{"path": "<node path>"}` or `{"test_id": "<id>"}` (§7 resolution)
-- Response: `{"ok": true, "data": {"injected": true, "target": "/root/Main/Button", "viewport": "/root"}}`
-- Routing (§6): hover-establishing motion + press + release via the owning `Viewport.push_input()` (works headless, reaches SubViewports); for SubViewportContainer-embedded targets the hover motion is routed through the root viewport at window coordinates (engine hover-walk requirement, godot#89757)
-- Errors: `400 MISSING_PARAM` (both or neither of path/test_id), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID` (details.matches), `400 BAD_TARGET` (target is not a Control)
+- Response: `{"ok": true, "data": {"injected": true, "target": "/root/Main/Button", "viewport": "/root", "mode": "gui"}}` or `{"ok": true, "data": {"injected": true, "target": "/root/Main/Hotspot", "viewport": "/root", "mode": "picking"}}`
+- Routing (§6):
+  - **Control targets (`mode: "gui"`)**: hover-establishing motion + press + release via the owning `Viewport.push_input()`; for SubViewportContainer-embedded targets the hover motion is routed through the root viewport at window coordinates (engine hover-walk requirement, godot#89757).
+  - **CollisionObject2D targets (`mode: "picking"`)**: click point resolved from the first enabled `CollisionShape2D` child (shape-geometry aware: RectangleShape2D, CircleShape2D, CapsuleShape2D center; ConvexPolygonShape2D centroid; SegmentShape2D midpoint) or fallback to `global_position`; hover motion + press + release via owning viewport `push_input()`. Events are queued into `physics_picking_events` and delivered by `_process_picking()` on physics frames. The root viewport sends `notify_mouse_entered()` to ensure `gui.mouse_in_viewport` is established.
+- Errors: `400 MISSING_PARAM` (both or neither of path/test_id), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID` (details.matches), `400 BAD_TARGET` (target is not a Control or CollisionObject2D), `400 PICKING_DISABLED` (CollisionObject2D target in a Viewport with `physics_object_picking == false`).
 
 ```bash
 curl -X POST http://127.0.0.1:9090/input/click \
@@ -329,7 +359,7 @@ Inject a key press+release. The `key` parameter resolves in order:
 - Body: `{"key": "<action name or KEY_* constant>"}`; optional `path`/`test_id` targets the key at a Control (grab_focus + owning-viewport `push_input`) instead of the global path
 - Global form (no target): `Input.parse_input_event()` + `Input.flush_buffered_events()` — the godot#73557 headless workaround; delivers the events AND updates action state (`Input.is_action_just_pressed` works). Press and release are flushed in the same frame, so held state (`is_action_pressed`) is not observable — use `is_action_just_pressed` or a targeted form
 - Response: `{"ok": true, "data": {"injected": true, "key": "ui_accept", "device": 16, "target": ""}}` (device per §6: keyboard = 16 on 4.7+)
-- Errors: `400 MISSING_PARAM`, `400 UNKNOWN_KEY` (neither action nor KEY_* constant), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `400 BAD_TARGET`
+- Errors: `400 MISSING_PARAM`, `400 UNKNOWN_KEY` (neither action nor KEY\_\* constant), `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `400 BAD_TARGET`
 - Out of scope (v0.1): gamepad (`/input/gamepad`, v0.2), touch (v0.2), modifier chords
 
 ```bash
@@ -450,7 +480,7 @@ curl http://127.0.0.1:9090/assets/loaded
   - `POST /wait/frames` to advance frames
   - `GET /signal/wait` to block on a signal
 - **Auto-wait contract (client-side)**: pre-built interaction steps wait `interaction_autowait_frames` (default **1**) internally after each injection.
-  - This is *delivery* confirmation (event reached the input queue), NOT *effect* confirmation (button `pressed` emitted, handler ran, side effects propagated).
+  - This is _delivery_ confirmation (event reached the input queue), NOT _effect_ confirmation (button `pressed` emitted, handler ran, side effects propagated).
   - Games with frame-bound side effects (scene transitions, deferred state mutations) must raise this value or add explicit `Then I wait for the signal "..."` steps.
   - Configurable per client: `GODRIVER_AUTOWAIT_FRAMES` env var / World option. This is a client-library setting, not a server setting.
 - Synchronous endpoints (reads, asserts): response reflects state at the **next main-loop tick** after the request arrives — the server dispatches all SceneTree access to the game's main thread, so handling happens on the following frame, not mid-request.
@@ -487,16 +517,16 @@ curl http://127.0.0.1:9090/assets/loaded
 - Absent autoload (no target given) → `/state/set` and `/state/schema` return `409 STATE_AUTOLOAD_MISSING` with a configuration hint in `details`. All other endpoints unaffected.
 - `/state/set` coercion — JSON value coerced to the **declared type of the target property**:
 
-| Target type | Accepted JSON | Rejected |
-| ----------- | ------------- | -------- |
-| int         | integral number, `"3"` | `3.5` → `400 TYPE_MISMATCH` |
-| float       | number, `"3.14"` | non-numeric string |
-| bool        | `true`/`false`, `"true"`/`"false"` | `"1"` |
-| String      | string, number, bool (stringified) | null || Vector2     | `{"x":..,"y":..}`, `[x,y]` | wrong arity |
+| Target type | Accepted JSON                                  | Rejected                         |
+| ----------- | ---------------------------------------------- | -------------------------------- | --- | ------- | -------------------------- | ----------- |
+| int         | integral number, `"3"`                         | `3.5` → `400 TYPE_MISMATCH`      |
+| float       | number, `"3.14"`                               | non-numeric string               |
+| bool        | `true`/`false`, `"true"`/`"false"`             | `"1"`                            |
+| String      | string, number, bool (stringified)             | null                             |     | Vector2 | `{"x":..,"y":..}`, `[x,y]` | wrong arity |
 | Color       | `{"r":..,"g":..,"b":..,"a":..}`, `"#RRGGBBAA"` | out-of-range → 400 (no clamping) |
-| Array       | array (untyped) | |
-| Dictionary  | object | |
-| NodePath    | string | |
+| Array       | array (untyped)                                |                                  |
+| Dictionary  | object                                         |                                  |
+| NodePath    | string                                         |                                  |
 
 - `null` writes are **type-dependent**:
   - **Allowed** when the target property's declared type is nullable — `Object`, `Resource`, Variant-typed (`Variant`), or untyped properties. This is the idiomatic clear (e.g. `{"equipped_weapon": null}` unequips).
@@ -506,10 +536,14 @@ curl http://127.0.0.1:9090/assets/loaded
 - `GET /state/schema` response:
 
 ```json
-{ "ok": true, "data": { "autoload": "GameState", "properties": [ { "name": "player_life", "type": "int", "value": 3 } ] } }
+{
+  "ok": true,
+  "data": { "autoload": "GameState", "properties": [{ "name": "player_life", "type": "int", "value": 3 }] }
+}
 ```
 
-  (discovered via `Object.get_property_list()` on the autoload)
+(discovered via `Object.get_property_list()` on the autoload)
+
 - Atomicity: single-key writes are atomic; multi-key bodies are applied in order with no transaction rollback (documented limitation).
 
 ## 9. Determinism Semantics
@@ -532,28 +566,30 @@ curl http://127.0.0.1:9090/assets/loaded
 
 Stable machine-readable codes. Never repurpose a code.
 
-| Code | HTTP | Meaning |
-| ---- | ---- | ------- |
-| BAD_JSON | 400 | body is not valid JSON |
-| BAD_PATH | 400 | node path malformed |
-| MISSING_PARAM | 400 | required query/body parameter absent |
-| UNKNOWN_KEY | 400 | state key not on autoload |
-| TYPE_MISMATCH | 400 | coercion failed |
-| NULL_NOT_ALLOWED | 400 | null write rejected |
-| UNSUPPORTED_TYPE | 400 | Variant type not in §4 |
-| TEST_ID_NOT_FOUND | 404 | no node carries this test_id |
-| NODE_NOT_FOUND | 404 | path does not resolve |
-| PROPERTY_NOT_FOUND | 404 | node lacks the property |
-| SCENE_NOT_FOUND | 404 | scene resource missing |
-| TARGET_NOT_FOUND | 404 | `/state/*` target node/resource path does not resolve |
-| AMBIGUOUS_TEST_ID | 409 | multiple nodes match |
-| STATE_AUTOLOAD_MISSING | 409 | no state autoload configured |
-| UNAUTHORIZED | 401 | token invalid or missing |
-| HEADLESS_RENDERING_DISABLED | 400 | `/screenshot/*` requested while running with `--headless` (RendererDummy active) |
-| HDR_NOT_SUPPORTED | 400 | `/screenshot/*` requested HDR capture (EXR/`color_image`); visual regression is SDR-only |
-| SERVER_BUSY | 503 | wait capacity exceeded |
-| SCENE_READY_TIMEOUT | 504 | `/reset` scene-readiness wait exceeded its bound (~5s default); engine hang or async-initializing scene |
-| INTERNAL | 500 | unhandled server error |
+| Code                        | HTTP | Meaning                                                                                                 |
+| --------------------------- | ---- | ------------------------------------------------------------------------------------------------------- |
+| BAD_JSON                    | 400  | body is not valid JSON                                                                                  |
+| BAD_PATH                    | 400  | node path malformed                                                                                     |
+| MISSING_PARAM               | 400  | required query/body parameter absent                                                                    |
+| BAD_TARGET                  | 400  | node is not a Control or CollisionObject2D                                                              |
+| PICKING_DISABLED            | 400  | target Viewport has physics_object_picking disabled                                                     |
+| UNKNOWN_KEY                 | 400  | state key not on autoload                                                                               |
+| TYPE_MISMATCH               | 400  | coercion failed                                                                                         |
+| NULL_NOT_ALLOWED            | 400  | null write rejected                                                                                     |
+| UNSUPPORTED_TYPE            | 400  | Variant type not in §4                                                                                  |
+| TEST_ID_NOT_FOUND           | 404  | no node carries this test_id                                                                            |
+| NODE_NOT_FOUND              | 404  | path does not resolve                                                                                   |
+| PROPERTY_NOT_FOUND          | 404  | node lacks the property                                                                                 |
+| SCENE_NOT_FOUND             | 404  | scene resource missing                                                                                  |
+| TARGET_NOT_FOUND            | 404  | `/state/*` target node/resource path does not resolve                                                   |
+| AMBIGUOUS_TEST_ID           | 409  | multiple nodes match                                                                                    |
+| STATE_AUTOLOAD_MISSING      | 409  | no state autoload configured                                                                            |
+| UNAUTHORIZED                | 401  | token invalid or missing                                                                                |
+| HEADLESS_RENDERING_DISABLED | 400  | `/screenshot/*` requested while running with `--headless` (RendererDummy active)                        |
+| HDR_NOT_SUPPORTED           | 400  | `/screenshot/*` requested HDR capture (EXR/`color_image`); visual regression is SDR-only                |
+| SERVER_BUSY                 | 503  | wait capacity exceeded                                                                                  |
+| SCENE_READY_TIMEOUT         | 504  | `/reset` scene-readiness wait exceeded its bound (~5s default); engine hang or async-initializing scene |
+| INTERNAL                    | 500  | unhandled server error                                                                                  |
 
 ## Appendix B — Example Curl Session
 
@@ -582,16 +618,11 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 5)** — QA-round hardening: §6 global-event fallback now calls `Input.flush_buffered_events()` after `parse_input_event` (confirmed headless workaround for godot#73557, delivers events AND updates action state); `--display-driver mock` documented as rejected (registered only in test-runner binaries); §5.0 `/reset` atomicity — 200 resolves only after the new scene is live and ready (`is_node_ready()` polling, bounded ~5s, timeout → `200` with `scene_ready: false`); §8 null writes allowed for nullable target types (Object/Resource/Variant/untyped — idiomatic clearing), `NULL_NOT_ALLOWED` kept for value types; §8 optional `target` param on `/state/set` + `/state/schema` (node or Resource path; invalid → `404 TARGET_NOT_FOUND`, new Appendix A code); §5.7 `/wait/frames` implementation note (await `process_frame` N times, never timers/sleeps); §6.1 client-side HTTP agent pool sizing (`maxSockets ≥ max_blocked_waits`) to prevent pool starvation in parallel CI.
 - **0.1 (draft, rev 6)** — edge-case hardening from sixth review: §5.0 `/reset` readiness timeout changed from `200 {scene_ready: false}` to **`504 SCENE_READY_TIMEOUT`** (new Appendix A code + §3 row) — a half-loaded tree must fail tests immediately, not mask a hang; documented async-`_ready()` caveat (`is_node_ready()` is true before async init concludes; games with async init SHOULD expose a readiness signal); §5.0 + §8 document the **ResourceLoader cache pollution vector** — `/reset` does not evict the resource cache (no public API), so mutating disk-backed `.tres` targets leaks across scenarios; rules: `duplicate()` before mutation, `take_over_path()` as advanced restore; §4 null row cross-references §8 write semantics; §5.7 pause semantics corrected — `process_frame` keeps ticking while paused (dispatcher `PROCESS_MODE_ALWAYS`), `physics_frame` reliance under pause not guaranteed, frame waits use `process_frame` only; §6 flush scope clarified (delivery into `_input()`/action state, not effect — `_physics_process`/`_unhandled_input` handlers run next tick; 1-frame auto-wait stays mandatory); §6.1 pool sizing hardened (set `maxSockets` explicitly; common tooling defaults are 4–6, never rely on defaults).
 - **0.1 (draft, rev 7)** — §5 Phase-1 endpoint reference filled (GTD-010): `GET /health` (status/godot_version/spec_version), `GET /scene/current`, `GET /input/map` (InputMap actions with per-type event summaries; device constants per §6), `GET /node/<path>` (shared node-summary shape: path/name/type/test_id/child_count/children/script), `GET /node/<path>/property/<name>` (value per §4; `PROPERTY_NOT_FOUND` covers engine-private properties), `GET /node?test_id=` (§7 resolution; O(nodes) scan note), `GET /nodes?group=` (paginated, `meta.total`, empty group = 200 not 404, out-of-range limit → `400 TYPE_MISMATCH`), `GET /state` (flat `values` map of script-declared properties). New Appendix A code `MISSING_PARAM` (400, required query/body parameter absent). Phase 2–4 endpoint sections are stubs pointing at their implementing briefs; `/ui/layout` contract note preserved (get_global_rect → flat Rect2, offset-transform-aware 4.7+).
-
 - **0.1 (draft, rev 8)** — `/reset` implemented (GTD-016) with engine-verified corrections: §5.0 async-init caveat strengthened — `is_node_ready()` becomes true when `NOTIFICATION_READY` dispatches, BEFORE a suspended script `_ready()` concludes (verified: a scene whose `_ready()` awaits forever still yields `200`), so `/reset` cannot detect async init at all and games with async init MUST expose a readiness signal; the `504 SCENE_READY_TIMEOUT` bound is defensive (scene never appears / engine hang), not reachable from a suspended `_ready()`. Orphan-sweep allowlist now includes engine auto-named (`@`-prefixed) internal nodes and the `godriver_keep` metadata escape hatch.
-
 - **0.1 (draft, rev 9)** — `POST /input/click` implemented (GTD-020): §5.3 entry filled (body = exactly one of `path`/`test_id`; response `{injected, target, viewport}`; routing per §6 with the SubViewportContainer hover-through-root rule; errors `MISSING_PARAM`/`NODE_NOT_FOUND`/`TEST_ID_NOT_FOUND`/`AMBIGUOUS_TEST_ID`/`BAD_TARGET`). §6 coordinate invariant refined with the spike-verified rule: `Control.get_global_rect()` is already viewport-canvas space — the `affine_inverse` mapping applies only from WINDOW coordinates.
-
 - **0.1 (draft, rev 10)** — `POST /input/type` + `POST /input/key` implemented (GTD-021): §5.3 entries filled. Key resolution order = InputMap action first, then `KEY_*` constant via the generated `TestDriverKeyMap` map (finding: ClassDB does NOT expose `@GlobalScope` constants and `Expression` cannot resolve them — the map references GDScript globals directly, parse-time checked; `KEY_CMD_OR_CTRL` excluded as platform-conditional). Global key form = `Input.parse_input_event` + `Input.flush_buffered_events()` (godot#73557); press+release flush in the SAME frame so held state (`is_action_pressed`) is not observable — `is_action_just_pressed` is (documented). Typing = targeted path only (grab_focus + per-char unicode key events), never `parse_input_event`. New error code usage: `400 UNKNOWN_KEY`.
-
 - **0.1 (draft, rev 11)** — `POST /scene/load` implemented (GTD-023): §5.4 entry filled (readiness semantics shared with `/reset`; tween/orphan steps SKIPPED — load is a transition, not a cleanup; in-flight guard SHARED with `/reset` → `503 SERVER_BUSY`; `404 SCENE_NOT_FOUND` via `ResourceLoader.exists(path, "PackedScene")`). GTD-022 compat shim: `TestDriverCompat` (device-ID constants 16/32/-1 on 4.7+ with 0 fallback, `ignore_joypad_on_unfocused_application=false` at startup) — all injected events stamp device through compat.
-
 - **0.1 (draft, rev 12)** — `GET /assets/loaded` implemented (GTD-024) as new §5.9a with an explicit scope limitation: Godot 4.7 has NO public API to enumerate all loaded resources (`ResourceLoader.list_handled_resources()` absent — verified against the 4.7.2 ClassDB method table), so the endpoint reports the engine-wide resource count (`Performance.get_monitor(OBJECT_RESOURCE_COUNT)`) plus the DRIVER-TRACKED inventory (scene loads via `/scene/load` and `/reset`), paginated. Full inventory deferred until Godot ships an enumeration API.
-
 - **0.1 (draft, rev 13)** — `GET /ui/layout/<path>` implemented (GTD-025): §5.1 entry filled (path or test_id targeting; snapshot shape with `global_rect` flat Rect2 via `get_global_rect()` viewport-canvas coords; `?depth=N` recursion max 16; errors `NODE_NOT_FOUND`/`TEST_ID_NOT_FOUND`/`AMBIGUOUS_TEST_ID`/`BAD_TARGET`/`TYPE_MISMATCH`).
+- **0.1 (draft, rev 14)** — `POST /input/click` expanded to `CollisionObject2D` targets (GTD-030): §5.3 updated (supports Area2D/CollisionObject2D hotspots via physics picking; shape-geometry click points; response includes `mode: "gui" | "picking"`; new Appendix A error `400 PICKING_DISABLED` when target viewport has picking off; root Window sends `notify_mouse_entered()` to ensure `gui.mouse_in_viewport` is established before `_process_picking` runs).
 - Policy: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

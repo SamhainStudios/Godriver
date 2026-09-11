@@ -118,27 +118,44 @@ static func resolve_target(root: Node, args: Dictionary) -> Dictionary:
 
 
 ## POST /input/click — inject hover motion + press + release at the target
-## Control's rect center. Returns the funnel shape.
+## node's center. Supports Control (GUI path) and CollisionObject2D (physics
+## picking path). Returns the funnel shape.
 static func click(tree: SceneTree, args: Dictionary) -> Dictionary:
 	var root := tree.root
 	var t := resolve_target(root, args)
 	if not t.ok:
 		return {"code": t.code, "body": {"ok": false, "error": t.error}}
 	var node: Node = t.node
-	if not node is Control:
+	if node is Control:
+		var err := _click_control(root, node as Control)
+		if not err.is_empty():
+			return {
+				"code": 500,
+				"body": {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": err}},
+			}
 		return {
-			"code": 400,
-			"body": {"ok": false, "error": {"code": "BAD_TARGET", "message": "node %s is not a Control (type %s)" % [t.path, node.get_class()]}},
+			"code": 200,
+			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": String((node as Control).get_viewport().get_path()), "mode": "gui"}},
 		}
-	var err := _click_control(root, node as Control)
-	if not err.is_empty():
+	if node is CollisionObject2D:
+		var err2 := _click_collision_object(root, node as CollisionObject2D)
+		if not err2.is_empty():
+			if err2.begins_with("PICKING_DISABLED:"):
+				return {
+					"code": 400,
+					"body": {"ok": false, "error": {"code": "PICKING_DISABLED", "message": err2.substr("PICKING_DISABLED:".length())}},
+				}
+			return {
+				"code": 500,
+				"body": {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": err2}},
+			}
 		return {
-			"code": 500,
-			"body": {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": err}},
+			"code": 200,
+			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": String((node as CollisionObject2D).get_viewport().get_path()), "mode": "picking"}},
 		}
 	return {
-		"code": 200,
-		"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": String((node as Control).get_viewport().get_path())}},
+		"code": 400,
+		"body": {"ok": false, "error": {"code": "BAD_TARGET", "message": "node %s is not a Control or CollisionObject2D (type %s)" % [t.path, node.get_class()]}},
 	}
 
 
@@ -185,6 +202,94 @@ static func _click_control(root: Node, control: Control) -> String:
 	viewport.push_input(_make_mouse_button(local_pos, local_pos, true), true)
 	viewport.push_input(_make_mouse_button(local_pos, local_pos, false), true)
 	return ""
+
+
+## Physics-picking injection path (GTD-030). CollisionObject2D targets receive
+## mouse input through Viewport physics picking, NOT the GUI path:
+##   - push_input queues unconsumed mouse events into physics_picking_events
+##     when physics_object_picking is on (viewport.cpp _push_unhandled_input_internal).
+##   - _process_picking() consumes the queue on PHYSICS frames
+##     (scene_tree.cpp _picking_viewports group) — callers must wait
+##     >=1 physics_frame before asserting signals.
+##   - _process_picking early-returns and CLEARS the queue when
+##     !gui.mouse_in_viewport — the hover motion is mandatory here too.
+##   - GUI has precedence: a Control under the click point consumes the event
+##     before picking ever sees it (documented caveat, SPEC §6).
+## Returns "" on success, "PICKING_DISABLED:<msg>" or a plain error message.
+static func _click_collision_object(root: Node, co: CollisionObject2D) -> String:
+	var viewport := co.get_viewport()
+	if viewport == null:
+		return "no viewport for %s" % co.get_path()
+	if not viewport.physics_object_picking:
+		return "PICKING_DISABLED:viewport %s has physics_object_picking disabled — enable it (root viewport: project setting physics/common/enable_object_picking; SubViewports default to false)" % String(viewport.get_path())
+
+	var local_pos := _collision_click_point(co)
+	if local_pos == Vector2.INF:
+		return "no enabled CollisionShape2D under %s and node has no usable position" % co.get_path()
+
+	# Hover establishment — same routing rules as the GUI path (see
+	# _click_control): container-attached SubViewports get their mouse-in-
+	# viewport state via the ROOT's hover walk at window coords; standalone
+	# SubViewports and root Windows need notify_mouse_entered() to set
+	# gui.mouse_in_viewport=true before _process_picking runs.
+	#
+	# _process_picking gate (viewport.cpp):
+	#   if (!gui.mouse_in_viewport || gui.subwindow_over) {
+	#       physics_picking_events.clear(); return; }   ← kills queue silently
+	#
+	# notify_mouse_entered() is idempotent: the engine guards double-calls
+	# internally (WARN_PRINT_ED — editor-only, never printed in exported games
+	# or headless CI). Always safe to call before the first push_input.
+	if viewport is SubViewport:
+		var container := viewport.get_parent() as SubViewportContainer
+		if container != null:
+			var shrink := container.stretch_shrink if container.stretch else 1
+			var window_pos: Vector2 = container.get_global_transform_with_canvas() \
+					* (viewport.get_final_transform() * (local_pos * shrink))
+			var root_local: Vector2 = root.get_final_transform().affine_inverse() * window_pos
+			root.push_input(_make_mouse_motion(root_local, root_local), true)
+		else:
+			viewport.notify_mouse_entered()
+			viewport.push_input(_make_mouse_motion(local_pos, local_pos), true)
+	else:
+		# Root Window: notify_mouse_entered() sets mouse_in_viewport=true.
+		# Without this, _process_picking immediately clears the picking queue.
+		viewport.notify_mouse_entered()
+		viewport.push_input(_make_mouse_motion(local_pos, local_pos), true)
+
+	# Press + release: unconsumed by GUI (no Control at the point) → queued
+	# into physics_picking_events by _push_unhandled_input_internal →
+	# delivered by _process_picking on the next physics frame(s).
+	viewport.push_input(_make_mouse_button(local_pos, local_pos, true), true)
+	viewport.push_input(_make_mouse_button(local_pos, local_pos, false), true)
+	return ""
+
+
+## Click point for a CollisionObject2D: first enabled CollisionShape2D child,
+## shape-geometry aware; fallback to the node's global_position. Returns
+## Vector2.INF when nothing usable exists.
+static func _collision_click_point(co: CollisionObject2D) -> Vector2:
+	for child in co.get_children():
+		var shape_node := child as CollisionShape2D
+		if shape_node == null or shape_node.disabled or shape_node.shape == null:
+			continue
+		var shape := shape_node.shape
+		var origin := shape_node.global_position
+		if shape is RectangleShape2D or shape is CircleShape2D or shape is CapsuleShape2D:
+			return origin  # centered on the shape node origin
+		if shape is ConvexPolygonShape2D:
+			var points: PackedVector2Array = (shape as ConvexPolygonShape2D).points
+			if not points.is_empty():
+				var sum := Vector2.ZERO
+				for p in points:
+					sum += p
+				return origin + sum / points.size()
+			return origin
+		if shape is SegmentShape2D:
+			var seg := shape as SegmentShape2D
+			return origin + (seg.a + seg.b) * 0.5
+		return origin
+	return co.global_position
 
 
 static func _make_mouse_button(local_pos: Vector2, global_pos: Vector2, pressed: bool) -> InputEventMouseButton:
