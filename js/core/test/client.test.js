@@ -148,3 +148,98 @@ test("POST body serialized as JSON with content-type", async () => {
 		m.mock.restore();
 	}
 });
+
+test("signal methods send correct request bodies", async () => {
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/signal/watch": { status: 200, body: JSON.stringify({ ok: true, data: { watched: true } }) },
+		"/signal/poll": { status: 200, body: JSON.stringify({ ok: true, data: { emissions: [] } }) },
+		"/signal/wait": { status: 200, body: JSON.stringify({ ok: true, data: { signaled: true } }) },
+	});
+	try {
+		const driver = await connect(9090);
+		await driver.watchSignal("/root/Main", "pressed");
+		await driver.pollSignals({ target: "/root/Main" });
+		await driver.waitSignal("/root/Main", "pressed", { timeout: 2 });
+		assert.equal(calls.length, 4);
+		assert.equal(JSON.parse(calls[1].init.body).signal, "pressed");
+		assert.equal(calls[2].url.includes("target=%2Froot%2FMain"), true);
+		assert.equal(JSON.parse(calls[3].init.body).timeout, 2);
+	} finally {
+		m.mock.restore();
+	}
+});
+
+test("assertVisible polls until passed true", async () => {
+	let attempt = 0;
+	const m = mock.method(globalThis, "fetch", async (url, init) => {
+		const path = new URL(url).pathname;
+		if (path === "/health") return { status: 200, text: async () => HEALTH_OK.body };
+		attempt++;
+		const passed = attempt >= 2;
+		return {
+			status: 200,
+			text: async () => JSON.stringify({ ok: true, data: { target: "/root/Main", actual: passed, expected: true, passed } }),
+		};
+	});
+	try {
+		const driver = await connect(9090);
+		const res = await driver.assertVisible("/root/Main", { timeoutMs: 1000, pollIntervalMs: 10 });
+		assert.equal(res.passed, true);
+		assert.equal(attempt, 2);
+	} finally {
+		m.mock.restore();
+	}
+});
+
+test("assertVisible throws DriverError ASSERTION_FAILED on timeout", async () => {
+	const m = mock.method(globalThis, "fetch", async (url) => {
+		const path = new URL(url).pathname;
+		if (path === "/health") return { status: 200, text: async () => HEALTH_OK.body };
+		return {
+			status: 200,
+			text: async () => JSON.stringify({ ok: true, data: { target: "/root/Main", actual: false, expected: true, passed: false } }),
+		};
+	});
+	try {
+		const driver = await connect(9090);
+		await assert.rejects(
+			driver.assertVisible("/root/Main", { timeoutMs: 50, pollIntervalMs: 10 }),
+			(e) => e instanceof DriverError && e.code === "ASSERTION_FAILED" && e.message.includes("/root/Main"),
+		);
+	} finally {
+		m.mock.restore();
+	}
+});
+
+test("state and dev methods send correct bodies", async () => {
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/state": { status: 200, body: JSON.stringify({ ok: true, data: { values: { hp: 100 } } }) },
+		"/state/schema": { status: 200, body: JSON.stringify({ ok: true, data: { properties: [] } }) },
+		"/state/set": { status: 200, body: JSON.stringify({ ok: true, data: { updated: ["hp"] } }) },
+		"/dev/seed": { status: 200, body: JSON.stringify({ ok: true, data: { seeded: true } }) },
+		"/dev/time_scale": { status: 200, body: JSON.stringify({ ok: true, data: { time_scale: 2.0 } }) },
+		"/dev/pause": { status: 200, body: JSON.stringify({ ok: true, data: { paused: true } }) },
+		"/dev/save/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: true } }) },
+	});
+	try {
+		const driver = await connect(9090);
+		await driver.getState();
+		await driver.getSchema();
+		await driver.setState({ hp: 150 });
+		await driver.setSeed(42);
+		await driver.setTimeScale(2.0);
+		await driver.setPause(true);
+		await driver.loadSaveSlot("save1");
+
+		assert.equal(calls.length, 8);
+		assert.equal(JSON.parse(calls[3].init.body).values.hp, 150);
+		assert.equal(JSON.parse(calls[4].init.body).seed, 42);
+		assert.equal(JSON.parse(calls[5].init.body).scale, 2.0);
+		assert.equal(JSON.parse(calls[6].init.body).enabled, true);
+		assert.equal(JSON.parse(calls[7].init.body).slot, "save1");
+	} finally {
+		m.mock.restore();
+	}
+});

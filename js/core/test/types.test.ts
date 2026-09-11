@@ -13,6 +13,36 @@ async function use(d: Driver): Promise<void> {
 	const data: unknown = await d.request("/node/root/Main");
 	const data2: unknown = await d.request("/reset", { method: "POST", body: { tween_mode: "kill" } });
 	const h: { status: string; godot_version: string; spec_version: string } = await d.health();
+
+	// Inputs & Scene
+	await d.click("/root/Button", { testId: false });
+	await d.type("/root/Input", "hello");
+	await d.pressKey("ui_accept");
+	await d.loadScene("res://main.tscn");
+	await d.layout("/root/Main");
+
+	// Signals
+	await d.watchSignal("/root/Main", "pressed");
+	await d.pollSignals({ target: "/root/Main" });
+	await d.waitSignal("/root/Main", "pressed", { timeout: 5 });
+
+	// Assertions & Waits
+	await d.assertVisible("/root/Main");
+	await d.assertEnabled("/root/Main");
+	await d.assertProperty("/root/Main", "name", "Main");
+	await d.waitFrames(2);
+	await d.waitVisible("/root/Main");
+	await d.waitHidden("/root/Main");
+
+	// State & Dev
+	await d.getState();
+	await d.getSchema();
+	await d.setState({ hp: 100 });
+	await d.setSeed(42);
+	await d.setTimeScale(1.5);
+	await d.setPause(false);
+	await d.loadSaveSlot("slot1");
+
 	d.close();
 }
 

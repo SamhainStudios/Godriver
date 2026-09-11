@@ -57,23 +57,71 @@ export class ConnectionError extends Error {
  */
 
 /**
+ * @typedef {Object} SignalEmission
+ * @property {string} target Canonical node path of the emitting node.
+ * @property {string} signal Name of the signal emitted.
+ * @property {Array<unknown>} args Arguments passed to the signal.
+ * @property {number} timestamp Wall-clock timestamp when emitted.
+ * @property {number} frame Engine process frame index when emitted.
+ * @property {number} seq Monotonic emission sequence number.
+ */
+
+/**
+ * @typedef {Object} PropertySchema
+ * @property {string} name Property name.
+ * @property {string} type SPEC §4/§8 type string (e.g. "int", "float", "String", "Vector2").
+ * @property {unknown} value Current property value.
+ */
+
+/**
  * @typedef {Object} Driver
  * @property {(path: string, init?: {method?: string, body?: unknown, timeoutMs?: number}) => Promise<unknown>} request
  *   Low-level typed request: unwraps the envelope, returns `data`, throws typed errors.
  * @property {() => Promise<{status: string, godot_version: string, spec_version: string}>} health
- * @property {(target: string, opts?: {testId?: boolean}) => Promise<unknown>} click
- *   POST /input/click + one-frame auto-wait (SPEC §6). target = node path, or
- *   test_id when opts.testId.
- * @property {(target: string, text: string, opts?: {testId?: boolean}) => Promise<unknown>} type
+ *   GET /health — read server status.
+ * @property {(target: string, opts?: {testId?: boolean}) => Promise<{injected: boolean, target: string, viewport?: string}>} click
+ *   POST /input/click + one-frame auto-wait (SPEC §6). target = node path, or test_id when opts.testId.
+ * @property {(target: string, text: string, opts?: {testId?: boolean}) => Promise<{injected: boolean, target: string}>} type
  *   POST /input/type + one-frame auto-wait.
- * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<unknown>} pressKey
+ * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<{injected: boolean, key: string, target?: string}>} pressKey
  *   POST /input/key + one-frame auto-wait; opts.target focuses a Control first.
  * @property {(path: string) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
- *   POST /scene/load — resolves only when the new scene is ready (server-side
- *   readiness contract, no extra wait).
- * @property {(target: string, opts?: {testId?: boolean, depth?: number}) => Promise<unknown>} layout
- *   GET /ui/layout — read, no wait.
- * @property {() => void} close Release the underlying agent resources.
+ *   POST /scene/load — resolves only when the new scene is ready.
+ * @property {(target: string, opts?: {testId?: boolean, depth?: number}) => Promise<Record<string, unknown>>} layout
+ *   GET /ui/layout — Control layout inspection.
+ * @property {(target: string, signal: string, opts?: {testId?: boolean}) => Promise<{watched: boolean, target: string, signal: string}>} watchSignal
+ *   POST /signal/watch — connect a signal observer.
+ * @property {(opts?: {target?: string, signal?: string}) => Promise<{emissions: SignalEmission[]}>} pollSignals
+ *   GET /signal/poll — poll buffered signal emissions.
+ * @property {(target: string, signal: string, opts?: {testId?: boolean, timeout?: number, timeoutMs?: number}) => Promise<{signaled: boolean, emission?: SignalEmission, reset?: boolean, timed_out?: boolean}>} waitSignal
+ *   POST /signal/wait — worker long-poll wait until signal fires.
+ * @property {(target: string, opts?: {testId?: boolean, expected?: boolean, timeoutMs?: number, pollIntervalMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} assertVisible
+ *   Auto-retrying /assert/visible assertion.
+ * @property {(target: string, opts?: {testId?: boolean, expected?: boolean, timeoutMs?: number, pollIntervalMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} assertEnabled
+ *   Auto-retrying /assert/enabled assertion.
+ * @property {(target: string, property: string, expected: unknown, opts?: {testId?: boolean, timeoutMs?: number, pollIntervalMs?: number}) => Promise<{target: string, property: string, actual: unknown, expected: unknown, passed: boolean}>} assertProperty
+ *   Auto-retrying /assert/property assertion.
+ * @property {(frames?: number) => Promise<{frames: number, elapsed: number}>} waitFrames
+ *   GET /wait/frames?frames=N — advance N process_frames.
+ * @property {(target: string, opts?: {testId?: boolean, timeoutMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} waitVisible
+ *   Alias for assertVisible(target, { ...opts, expected: true })
+ * @property {(target: string, opts?: {testId?: boolean, timeoutMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} waitHidden
+ *   Alias for assertVisible(target, { ...opts, expected: false })
+ * @property {(target?: string) => Promise<{autoload?: string, target?: string, values: Record<string, unknown>}>} getState
+ *   GET /state — read script-declared state properties.
+ * @property {(target?: string) => Promise<{autoload?: string, target?: string, properties: PropertySchema[]}>} getSchema
+ *   GET /state/schema — read property type declarations.
+ * @property {(values: Record<string, unknown>, target?: string) => Promise<{autoload?: string, target?: string, updated: string[]}>} setState
+ *   POST /state/set — mutate target properties with SPEC §8 coercion rules.
+ * @property {(seed: number) => Promise<{seeded: boolean, seed: number}>} setSeed
+ *   POST /dev/seed — seed global RNG.
+ * @property {(scale: number) => Promise<{time_scale: number}>} setTimeScale
+ *   POST /dev/time_scale — update Engine.time_scale.
+ * @property {(enabled: boolean) => Promise<{paused: boolean}>} setPause
+ *   POST /dev/pause — toggle SceneTree pause.
+ * @property {(slot: string) => Promise<{slot: string, loaded: boolean, path?: string}>} loadSaveSlot
+ *   POST /dev/save/load — verify/load save slot.
+ * @property {() => void} close Release underlying agent resources.
  */
 
 /**
@@ -142,6 +190,38 @@ async function _request(base, token, timeoutMs, agent, path, init = {}) {
 }
 
 /**
+ * Poll an assertion endpoint until passed is true or timeoutMs deadline expires.
+ *
+ * @param {string} base Base URL.
+ * @param {string} token Bearer token.
+ * @param {import("undici").Agent} agent Undici agent.
+ * @param {string} path Endpoint path.
+ * @param {Record<string, unknown>} body Request body.
+ * @param {number} [timeoutMs=3000] Polling deadline in ms.
+ * @param {number} [pollIntervalMs=50] Polling interval in ms.
+ * @returns {Promise<any>} Response data object when passed.
+ */
+async function _pollAssertion(base, token, agent, path, body, timeoutMs = 3000, pollIntervalMs = 50) {
+	const deadline = Date.now() + timeoutMs;
+	let lastData = null;
+	while (Date.now() <= deadline) {
+		const data = /** @type {any} */ (await _request(base, token, 2000, agent, path, { method: "POST", body }));
+		lastData = data;
+		if (data && data.passed === true) {
+			return data;
+		}
+		await new Promise((r) => setTimeout(r, pollIntervalMs));
+	}
+	const targetLabel = String(body.path || body.test_id || "target");
+	throw new DriverError(
+		"ASSERTION_FAILED",
+		`Assertion ${path} failed on ${targetLabel} after ${timeoutMs}ms (expected: ${JSON.stringify(body.expected)}, actual: ${JSON.stringify(lastData?.actual)})`,
+		200,
+		lastData,
+	);
+}
+
+/**
  * Connect to a running game with the test-driver addon active.
  *
  * Verifies `/health` before returning the driver handle; a refused connection
@@ -155,29 +235,30 @@ export async function connect(port, options = {}) {
 	const host = options.host ?? "127.0.0.1";
 	const token = options.token ?? "";
 	const timeoutMs = options.timeoutMs ?? 5000;
-	// SPEC §6.1: the pool must be sized explicitly — Node's default undici
-	// pool is small (4-6) and long-polls (max_blocked_waits up to 8) would
-	// starve parallel requests in CI.
 	const maxSockets = options.maxSockets ?? 16;
 	const { Agent } = await import("undici");
 	/** @type {import("undici").Agent} */
 	const agent = new Agent({ connections: maxSockets });
 	const base = `http://${host}:${port}`;
-	// Verify liveness up front: connection-refused must fail HERE, typed.
 	const healthData = /** @type {{status: string, godot_version: string, spec_version: string}} */ (
 		await _request(base, token, timeoutMs, agent, "/health")
 	);
-	return {
+
+	/** @type {Driver} */
+	const driver = {
 		/** @type {Driver["request"]} */
 		request: (path, init = {}) => _request(base, token, init.timeoutMs ?? timeoutMs, agent, path, init),
 		/** @type {Driver["health"]} */
 		health: () => Promise.resolve(healthData),
 		/** @type {Driver["click"]} */
-		click: (target, opts = {}) => _interact(base, token, timeoutMs, agent, "/input/click", target, opts),
+		click: (target, opts = {}) =>
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/click", target, opts)),
 		/** @type {Driver["type"]} */
-		type: (target, text, opts = {}) => _interact(base, token, timeoutMs, agent, "/input/type", target, { ...opts, text }),
+		type: (target, text, opts = {}) =>
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/type", target, { ...opts, text })),
 		/** @type {Driver["pressKey"]} */
-		pressKey: (key, opts = {}) => _interact(base, token, timeoutMs, agent, "/input/key", opts.target ?? null, { ...opts, key }),
+		pressKey: (key, opts = {}) =>
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/key", opts.target ?? null, { ...opts, key })),
 		/** @type {Driver["loadScene"]} */
 		loadScene: (path) =>
 			/** @type {Promise<{loaded: string, scene_ready: boolean}>} */
@@ -192,18 +273,96 @@ export async function connect(port, options = {}) {
 				suffix = `/${String(target).replace(/^\//, "")}`;
 				if (opts.depth) suffix += `?depth=${opts.depth}`;
 			}
-			return _request(base, token, timeoutMs, agent, `/ui/layout${suffix}`);
+			return /** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, agent, `/ui/layout${suffix}`));
 		},
+		/** @type {Driver["watchSignal"]} */
+		watchSignal: (target, signal, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { signal };
+			if (opts.testId) body.test_id = target;
+			else body.path = target;
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/signal/watch", { method: "POST", body }));
+		},
+		/** @type {Driver["pollSignals"]} */
+		pollSignals: (opts = {}) => {
+			const q = new URLSearchParams();
+			if (opts.target) q.set("target", opts.target);
+			if (opts.signal) q.set("signal", opts.signal);
+			const qs = q.toString();
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/signal/poll${qs ? "?" + qs : ""}`));
+		},
+		/** @type {Driver["waitSignal"]} */
+		waitSignal: (target, signal, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { signal };
+			if (opts.testId) body.test_id = target;
+			else body.path = target;
+			if (opts.timeout !== undefined) body.timeout = opts.timeout;
+			const effectiveTimeout = opts.timeoutMs ?? (opts.timeout ? (opts.timeout + 2) * 1000 : 35000);
+			return /** @type {Promise<any>} */ (_request(base, token, effectiveTimeout, agent, "/signal/wait", { method: "POST", body }));
+		},
+		/** @type {Driver["assertVisible"]} */
+		assertVisible: (target, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { expected: opts.expected ?? true };
+			if (opts.testId) body.test_id = target;
+			else body.path = target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/visible", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+		},
+		/** @type {Driver["assertEnabled"]} */
+		assertEnabled: (target, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { expected: opts.expected ?? true };
+			if (opts.testId) body.test_id = target;
+			else body.path = target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/enabled", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+		},
+		/** @type {Driver["assertProperty"]} */
+		assertProperty: (target, property, expected, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { property, expected };
+			if (opts.testId) body.test_id = target;
+			else body.path = target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/property", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+		},
+		/** @type {Driver["waitFrames"]} */
+		waitFrames: (frames = 1) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/wait/frames?frames=${frames}`)),
+		/** @type {Driver["waitVisible"]} */
+		waitVisible: (target, opts = {}) => driver.assertVisible(target, { ...opts, expected: true }),
+		/** @type {Driver["waitHidden"]} */
+		waitHidden: (target, opts = {}) => driver.assertVisible(target, { ...opts, expected: false }),
+		/** @type {Driver["getState"]} */
+		getState: (target) =>
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/state${target ? "?target=" + encodeURIComponent(target) : ""}`)),
+		/** @type {Driver["getSchema"]} */
+		getSchema: (target) =>
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/state/schema${target ? "?target=" + encodeURIComponent(target) : ""}`)),
+		/** @type {Driver["setState"]} */
+		setState: (values, target) => {
+			/** @type {Record<string, unknown>} */
+			const body = { values };
+			if (target) body.target = target;
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/state/set", { method: "POST", body }));
+		},
+		/** @type {Driver["setSeed"]} */
+		setSeed: (seed) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/seed", { method: "POST", body: { seed } })),
+		/** @type {Driver["setTimeScale"]} */
+		setTimeScale: (scale) =>
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/time_scale", { method: "POST", body: { scale } })),
+		/** @type {Driver["setPause"]} */
+		setPause: (enabled) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/pause", { method: "POST", body: { enabled } })),
+		/** @type {Driver["loadSaveSlot"]} */
+		loadSaveSlot: (slot) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/save/load", { method: "POST", body: { slot } })),
+		/** @type {Driver["close"]} */
 		close: () => {
 			agent.destroy?.();
 		},
 	};
+	return driver;
 }
 
 /**
- * Inject an input event, then auto-wait exactly one frame (SPEC §6 timing
- * contract: 200 = injected only; effects land on the next engine tick).
- * The wait uses the addon's frame-wait endpoint — no hidden sleeps.
+ * Inject an input event, then auto-wait exactly one frame.
  *
  * @param {string} base Base URL.
  * @param {string} token Bearer token.

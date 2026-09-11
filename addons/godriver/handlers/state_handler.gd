@@ -8,6 +8,7 @@ const DEFAULT_STATE_AUTOLOAD := "GameState"
 
 
 static func _resolve_target(tree: SceneTree, target: String) -> Dictionary:
+	target = target.uri_decode()
 	if target.is_empty():
 		var autoload_name := str(ProjectSettings.get_setting(STATE_AUTOLOAD_SETTING, DEFAULT_STATE_AUTOLOAD))
 		var state: Node = tree.root.get_node_or_null(NodePath("/root/" + autoload_name))
