@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 15)
+Version: 0.1 (draft, rev 16)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -421,9 +421,39 @@ Worker-thread long-polling endpoint. Blocks until a matching signal fires after 
   - Reset Intercept: `200 {"ok": true, "data": {"signaled": false, "reset": true}}`
   - Timeout: `200 {"ok": true, "data": {"signaled": false, "timed_out": true}}`
 
-### 5.6 Assertions (`/assert/visible`, `/assert/enabled`, `/assert/property`)
+### 5.6 Assertions (`POST /assert/visible`, `POST /assert/enabled`, `POST /assert/property`)
 
-**Documented with their implementing briefs (Phase 3).**
+Server-side node state assertions. Target node by `path` or `test_id` (§7). All assertion evaluations run on the main thread (§6).
+
+> [!IMPORTANT]
+> Assertion evaluation mismatches return HTTP 200 with `passed: false` in the data payload. HTTP 4xx/5xx status codes are reserved exclusively for request errors (such as target node not found or missing parameters).
+
+#### `POST /assert/visible`
+
+Evaluates whether the target node is visible.
+
+- Body: `{"path": "<node_path>", "expected": true}` or `{"test_id": "<id>", "expected": true}` (`expected` defaults to `true` if omitted).
+- Evaluation: for `CanvasItem` and `Node3D`, uses `is_visible_in_tree()`. For generic `Node`, checks `visible` property if present, else defaults to `true`.
+- Response: `200 {"ok": true, "data": {"target": "<canonical_path>", "actual": <bool>, "expected": <bool>, "passed": <bool>}}`
+- Errors: `400 MISSING_PARAM`, `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`.
+
+#### `POST /assert/enabled`
+
+Evaluates whether the target node is enabled.
+
+- Body: `{"path": "<node_path>", "expected": true}` or `{"test_id": "<id>", "expected": true}` (`expected` defaults to `true` if omitted).
+- Evaluation: for `BaseButton`, checks `!disabled`. For `CollisionObject2D` or `CollisionShape2D`, checks `!disabled` if property exists. For generic nodes, checks `process_mode != PROCESS_MODE_DISABLED`.
+- Response: `200 {"ok": true, "data": {"target": "<canonical_path>", "actual": <bool>, "expected": <bool>, "passed": <bool>}}`
+- Errors: `400 MISSING_PARAM`, `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`.
+
+#### `POST /assert/property`
+
+Evaluates an arbitrary node property value against an expected Variant value.
+
+- Body: `{"path": "<node_path>", "property": "<prop_name>", "expected": <value>}` or `{"test_id": "<id>", "property": "<prop_name>", "expected": <value>}`.
+- Evaluation: fetches `node.get(property)`. Compares `actual == expected`.
+- Response: `200 {"ok": true, "data": {"target": "<canonical_path>", "property": "<prop_name>", "actual": <serialized_value>, "expected": <serialized_value>, "passed": <bool>}}`
+- Errors: `400 MISSING_PARAM`, `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `404 PROPERTY_NOT_FOUND`.
 
 ### 5.7 Waits (`/wait`, `/wait/frames`)
 
@@ -655,4 +685,5 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 13)** — `GET /ui/layout/<path>` implemented (GTD-025): §5.1 entry filled (path or test_id targeting; snapshot shape with `global_rect` flat Rect2 via `get_global_rect()` viewport-canvas coords; `?depth=N` recursion max 16; errors `NODE_NOT_FOUND`/`TEST_ID_NOT_FOUND`/`AMBIGUOUS_TEST_ID`/`BAD_TARGET`/`TYPE_MISMATCH`).
 - **0.1 (draft, rev 14)** — `POST /input/click` expanded to `CollisionObject2D` targets (GTD-030): §5.3 updated (supports Area2D/CollisionObject2D hotspots via physics picking; shape-geometry click points; response includes `mode: "gui" | "picking"`; new Appendix A error `400 PICKING_DISABLED` when target viewport has picking off; root Window sends `notify_mouse_entered()` to ensure `gui.mouse_in_viewport` is established before `_process_picking` runs).
 - **0.1 (draft, rev 15)** — Signal observation and waiting implemented (GTD-031): §5.5 filled (`POST /signal/watch`, `GET /signal/poll`, `POST /signal/wait` / `GET /signal/wait`). Thread-safe emission buffer; signal watcher registration runs on main thread (godot#117396); worker long-polling bounded to `MAX_BLOCKED_WAITS = 8` (§6.1); `/reset` clears watchers and emissions; new Appendix A error `400 SIGNAL_NOT_FOUND`.
+- **0.1 (draft, rev 16)** — Server-side assertion endpoints implemented (GTD-032): §5.6 filled (`POST /assert/visible`, `POST /assert/enabled`, `POST /assert/property`). Evaluates target state on main thread; assertion mismatches return HTTP 200 with `passed: false` (not HTTP 500 error envelope).
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

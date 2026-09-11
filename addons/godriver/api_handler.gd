@@ -13,6 +13,8 @@ extends Node
 ## A handler that crashes (script error → null result) or returns anything
 ## else is funneled to a 500 INTERNAL_ERROR envelope — the server stays up.
 
+const TestDriverAssertionHandler := preload("res://addons/godriver/handlers/assertion_handler.gd")
+
 const SPEC_VERSION := "0.1"
 
 ## When non-empty, requests must carry `Authorization: Bearer <token>`;
@@ -61,6 +63,10 @@ var routes := {
 	"/signal/watch": {"post": "signal_watch"},
 	"/signal/poll": {"get": "signal_poll", "post": "signal_poll"},
 	"/signal/wait": {"get": "signal_wait", "post": "signal_wait"},
+	# GTD-032: /assert/visible, /assert/enabled, /assert/property (SPEC §5.6).
+	"/assert/visible": {"post": "assert_visible"},
+	"/assert/enabled": {"post": "assert_enabled"},
+	"/assert/property": {"post": "assert_property"},
 }
 
 # --- /wait/frames state (GTD-026, SPEC §5.7) ---
@@ -128,17 +134,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key":
-			# POST body: {"path": "..."} / {"test_id": "..."} / {"text": ...} /
-			# {"key": ...} — parse on the worker thread (plain data only),
-			# same fallback as /reset.
-			var body: Variant = req.get_body_parsed()
-			if not (body is Dictionary) and not String(req.body).is_empty():
-				body = JSON.parse_string(String(req.body))
-			if body is Dictionary:
-				return body
-			return {}
-		"signal_watch", "signal_poll", "signal_wait":
+		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -527,4 +523,18 @@ func _dispatch_signal_wait(req: HttpRequest, res: HttpResponse) -> bool:
 
 	res.json(int(final_status.code), final_status.body)
 	return true
+
+
+# --- GTD-032 Assert Endpoints (SPEC §5.6) ---
+
+func _main_assert_visible(args: Dictionary) -> Dictionary:
+	return TestDriverAssertionHandler.assert_visible(get_tree().root, args)
+
+
+func _main_assert_enabled(args: Dictionary) -> Dictionary:
+	return TestDriverAssertionHandler.assert_enabled(get_tree().root, args)
+
+
+func _main_assert_property(args: Dictionary) -> Dictionary:
+	return TestDriverAssertionHandler.assert_property(get_tree().root, args)
 
