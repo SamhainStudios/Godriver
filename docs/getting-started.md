@@ -108,6 +108,44 @@ await driver.loadScene("res://scenes/main_menu.tscn");
 await driver.loadScene("scenes/main_menu.tscn");
 ```
 
+### Headless `Area2D` & 2D Hotspot Guidance
+In Godot 4, `Area2D` physics picking (`input_event` signal) relies on `Viewport._process_picking()`, which flushes during physics process frames. In `--headless` mode when no physics bodies are actively moving, physics picking flushes can stall.
+
+To make `Area2D` hotspots respond instantly to both normal gameplay AND headless test injection (`Viewport.push_input`), handle mouse events in `_unhandled_input(event)`:
+
+```gdscript
+# hotspot.gd — Headless-compatible Area2D pattern
+extends Area2D
+
+signal clicked
+
+@export var enabled: bool = true
+
+func _ready() -> void:
+    # Standard physics picking for normal GUI gameplay
+    input_event.connect(_on_physics_input_event)
+
+func _on_physics_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:
+    if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+        _trigger_click()
+
+func _unhandled_input(event: InputEvent) -> void:
+    if not enabled:
+        return
+    if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+        # Check if global click point falls inside collision shape bounds
+        var local_pos = to_local(event.global_position)
+        for child in get_children():
+            if child is CollisionShape2D and child.shape:
+                if child.shape.get_rect().has_point(local_pos):
+                    get_viewport().set_input_as_handled()
+                    _trigger_click()
+                    break
+
+func _trigger_click() -> void:
+    clicked.emit()
+```
+
 ---
 
 ## 3. Running Tests with `@godriver/cli`
