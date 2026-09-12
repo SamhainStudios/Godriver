@@ -52,8 +52,6 @@ export class ConnectionError extends Error {
  * @property {string} [host="127.0.0.1"] Host the game listens on (addon binds 127.0.0.1).
  * @property {string} [token=""] Bearer token when the addon was launched with --test-driver-token.
  * @property {number} [timeoutMs=5000] Per-request timeout in milliseconds.
- * @property {number} [maxSockets=16] Undici agent pool size — MUST be >= the addon's
- *   max_blocked_waits cap (8, SPEC §6.1) or long-polls starve parallel requests.
  */
 
 /**
@@ -125,12 +123,11 @@ export class ConnectionError extends Error {
  */
 
 /**
- * Perform one enveloped request against the addon.
+ * Perform one enveloped request against the addon using native fetch.
  *
  * @param {string} base "http://127.0.0.1:9090" style base URL.
  * @param {string} token Bearer token ("" = auth disabled).
  * @param {number} timeoutMs AbortSignal timeout.
- * @param {import("undici").Agent} agent Undici agent (pool sizing).
  * @param {string} path Endpoint path, e.g. "/health".
  * @param {{method?: string, body?: unknown}} [init]
  * @returns {Promise<unknown>} The envelope's `data` payload.
@@ -138,7 +135,7 @@ export class ConnectionError extends Error {
  * @throws {ConnectionError} Network-level failure or timeout.
  * @throws {DriverError} with code "INTERNAL_ERROR" on malformed envelopes.
  */
-async function _request(base, token, timeoutMs, agent, path, init = {}) {
+async function _request(base, token, timeoutMs, path, init = {}) {
 	const method = init.method ?? "GET";
 	/** @type {Record<string, string>} */
 	const headers = {};
@@ -151,8 +148,6 @@ async function _request(base, token, timeoutMs, agent, path, init = {}) {
 	/** @type {RequestInit} */
 	const req = {
 		method,
-		// @ts-ignore - undici dispatcher is the documented pool-sizing hook.
-		dispatcher: agent,
 		signal: AbortSignal.timeout(timeoutMs),
 		headers,
 	};
@@ -194,18 +189,17 @@ async function _request(base, token, timeoutMs, agent, path, init = {}) {
  *
  * @param {string} base Base URL.
  * @param {string} token Bearer token.
- * @param {import("undici").Agent} agent Undici agent.
  * @param {string} path Endpoint path.
  * @param {Record<string, unknown>} body Request body.
  * @param {number} [timeoutMs=3000] Polling deadline in ms.
  * @param {number} [pollIntervalMs=50] Polling interval in ms.
  * @returns {Promise<any>} Response data object when passed.
  */
-async function _pollAssertion(base, token, agent, path, body, timeoutMs = 3000, pollIntervalMs = 50) {
+async function _pollAssertion(base, token, path, body, timeoutMs = 3000, pollIntervalMs = 50) {
 	const deadline = Date.now() + timeoutMs;
 	let lastData = null;
 	while (Date.now() <= deadline) {
-		const data = /** @type {any} */ (await _request(base, token, 2000, agent, path, { method: "POST", body }));
+		const data = /** @type {any} */ (await _request(base, token, 2000, path, { method: "POST", body }));
 		lastData = data;
 		if (data && data.passed === true) {
 			return data;
@@ -222,6 +216,19 @@ async function _pollAssertion(base, token, agent, path, body, timeoutMs = 3000, 
 }
 
 /**
+ * Normalize target string or options object. Supports "test_id:foo" prefix syntax.
+ * @param {string|null} target
+ * @param {{testId?: boolean, [k: string]: unknown}} [opts]
+ * @returns {{target: string|null, testId: boolean}}
+ */
+function _parseTarget(target, opts = {}) {
+	if (typeof target === "string" && target.startsWith("test_id:")) {
+		return { target: target.slice(8), testId: true };
+	}
+	return { target, testId: !!opts?.testId };
+}
+
+/**
  * Connect to a running game with the test-driver addon active.
  *
  * Verifies `/health` before returning the driver handle; a refused connection
@@ -235,53 +242,54 @@ export async function connect(port, options = {}) {
 	const host = options.host ?? "127.0.0.1";
 	const token = options.token ?? "";
 	const timeoutMs = options.timeoutMs ?? 5000;
-	const maxSockets = options.maxSockets ?? 16;
-	const { Agent } = await import("undici");
-	/** @type {import("undici").Agent} */
-	const agent = new Agent({ connections: maxSockets });
 	const base = `http://${host}:${port}`;
 	const healthData = /** @type {{status: string, godot_version: string, spec_version: string}} */ (
-		await _request(base, token, timeoutMs, agent, "/health")
+		await _request(base, token, timeoutMs, "/health")
 	);
 
 	/** @type {Driver} */
 	const driver = {
 		/** @type {Driver["request"]} */
-		request: (path, init = {}) => _request(base, token, init.timeoutMs ?? timeoutMs, agent, path, init),
+		request: (path, init = {}) => _request(base, token, init.timeoutMs ?? timeoutMs, path, init),
 		/** @type {Driver["health"]} */
 		health: () => Promise.resolve(healthData),
 		/** @type {Driver["click"]} */
 		click: (target, opts = {}) =>
-			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/click", target, opts)),
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, "/input/click", target, opts)),
 		/** @type {Driver["type"]} */
 		type: (target, text, opts = {}) =>
-			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/type", target, { ...opts, text })),
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, "/input/type", target, { ...opts, text })),
 		/** @type {Driver["pressKey"]} */
 		pressKey: (key, opts = {}) =>
-			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, agent, "/input/key", opts.target ?? null, { ...opts, key })),
+			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, "/input/key", opts.target ?? null, { ...opts, key })),
 		/** @type {Driver["loadScene"]} */
-		loadScene: (path) =>
-			/** @type {Promise<{loaded: string, scene_ready: boolean}>} */
-			(_request(base, token, timeoutMs, agent, "/scene/load", { method: "POST", body: { path } })),
+		loadScene: (path) => {
+			const normalizedPath = path.startsWith("res://") || path.startsWith("user://") ? path : `res://${path.replace(/^\//, "")}`;
+			return /** @type {Promise<{loaded: string, scene_ready: boolean}>} */ (
+				_request(base, token, timeoutMs, "/scene/load", { method: "POST", body: { path: normalizedPath } })
+			);
+		},
 		/** @type {Driver["layout"]} */
 		layout: (target, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			let suffix = "";
-			if (opts.testId) {
-				suffix = `?test_id=${encodeURIComponent(target)}`;
+			if (parsed.testId) {
+				suffix = `?test_id=${encodeURIComponent(parsed.target ?? "")}`;
 				if (opts.depth) suffix += `&depth=${opts.depth}`;
 			} else {
-				suffix = `/${String(target).replace(/^\//, "")}`;
+				suffix = `/${String(parsed.target ?? "").replace(/^\//, "")}`;
 				if (opts.depth) suffix += `?depth=${opts.depth}`;
 			}
-			return /** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, agent, `/ui/layout${suffix}`));
+			return /** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, `/ui/layout${suffix}`));
 		},
 		/** @type {Driver["watchSignal"]} */
 		watchSignal: (target, signal, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { signal };
-			if (opts.testId) body.test_id = target;
-			else body.path = target;
-			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/signal/watch", { method: "POST", body }));
+			if (parsed.testId) body.test_id = parsed.target;
+			else body.path = parsed.target;
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/signal/watch", { method: "POST", body }));
 		},
 		/** @type {Driver["pollSignals"]} */
 		pollSignals: (opts = {}) => {
@@ -289,74 +297,76 @@ export async function connect(port, options = {}) {
 			if (opts.target) q.set("target", opts.target);
 			if (opts.signal) q.set("signal", opts.signal);
 			const qs = q.toString();
-			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/signal/poll${qs ? "?" + qs : ""}`));
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/signal/poll${qs ? "?" + qs : ""}`));
 		},
 		/** @type {Driver["waitSignal"]} */
 		waitSignal: (target, signal, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { signal };
-			if (opts.testId) body.test_id = target;
-			else body.path = target;
+			if (parsed.testId) body.test_id = parsed.target;
+			else body.path = parsed.target;
 			if (opts.timeout !== undefined) body.timeout = opts.timeout;
 			const effectiveTimeout = opts.timeoutMs ?? (opts.timeout ? (opts.timeout + 2) * 1000 : 35000);
-			return /** @type {Promise<any>} */ (_request(base, token, effectiveTimeout, agent, "/signal/wait", { method: "POST", body }));
+			return /** @type {Promise<any>} */ (_request(base, token, effectiveTimeout, "/signal/wait", { method: "POST", body }));
 		},
 		/** @type {Driver["assertVisible"]} */
 		assertVisible: (target, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { expected: opts.expected ?? true };
-			if (opts.testId) body.test_id = target;
-			else body.path = target;
-			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/visible", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+			if (parsed.testId) body.test_id = parsed.target;
+			else body.path = parsed.target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/visible", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["assertEnabled"]} */
 		assertEnabled: (target, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { expected: opts.expected ?? true };
-			if (opts.testId) body.test_id = target;
-			else body.path = target;
-			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/enabled", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+			if (parsed.testId) body.test_id = parsed.target;
+			else body.path = parsed.target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/enabled", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["assertProperty"]} */
 		assertProperty: (target, property, expected, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { property, expected };
-			if (opts.testId) body.test_id = target;
-			else body.path = target;
-			return /** @type {Promise<any>} */ (_pollAssertion(base, token, agent, "/assert/property", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
+			if (parsed.testId) body.test_id = parsed.target;
+			else body.path = parsed.target;
+			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/property", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["waitFrames"]} */
-		waitFrames: (frames = 1) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/wait/frames?frames=${frames}`)),
+		waitFrames: (frames = 1) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/wait/frames?frames=${frames}`)),
 		/** @type {Driver["waitVisible"]} */
 		waitVisible: (target, opts = {}) => driver.assertVisible(target, { ...opts, expected: true }),
 		/** @type {Driver["waitHidden"]} */
 		waitHidden: (target, opts = {}) => driver.assertVisible(target, { ...opts, expected: false }),
 		/** @type {Driver["getState"]} */
 		getState: (target) =>
-			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/state${target ? "?target=" + encodeURIComponent(target) : ""}`)),
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/state${target ? "?target=" + encodeURIComponent(target) : ""}`)),
 		/** @type {Driver["getSchema"]} */
 		getSchema: (target) =>
-			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, `/state/schema${target ? "?target=" + encodeURIComponent(target) : ""}`)),
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/state/schema${target ? "?target=" + encodeURIComponent(target) : ""}`)),
 		/** @type {Driver["setState"]} */
 		setState: (values, target) => {
 			/** @type {Record<string, unknown>} */
 			const body = { values };
 			if (target) body.target = target;
-			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/state/set", { method: "POST", body }));
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/state/set", { method: "POST", body }));
 		},
 		/** @type {Driver["setSeed"]} */
-		setSeed: (seed) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/seed", { method: "POST", body: { seed } })),
+		setSeed: (seed) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/seed", { method: "POST", body: { seed } })),
 		/** @type {Driver["setTimeScale"]} */
 		setTimeScale: (scale) =>
-			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/time_scale", { method: "POST", body: { scale } })),
+			/** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/time_scale", { method: "POST", body: { scale } })),
 		/** @type {Driver["setPause"]} */
-		setPause: (enabled) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/pause", { method: "POST", body: { enabled } })),
+		setPause: (enabled) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/pause", { method: "POST", body: { enabled } })),
 		/** @type {Driver["loadSaveSlot"]} */
-		loadSaveSlot: (slot) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, agent, "/dev/save/load", { method: "POST", body: { slot } })),
+		loadSaveSlot: (slot) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/save/load", { method: "POST", body: { slot } })),
 		/** @type {Driver["close"]} */
-		close: () => {
-			agent.destroy?.();
-		},
+		close: () => {},
 	};
 	return driver;
 }
@@ -367,26 +377,26 @@ export async function connect(port, options = {}) {
  * @param {string} base Base URL.
  * @param {string} token Bearer token.
  * @param {number} timeoutMs Per-request timeout.
- * @param {import("undici").Agent} agent Undici agent.
  * @param {string} path Endpoint path.
- * @param {string|null} target Node path, or null when targeting by test_id.
+ * @param {string|null} rawTarget Node path, or null when targeting by test_id.
  * @param {{testId?: boolean, [k: string]: unknown}} opts
  * @returns {Promise<unknown>} The endpoint's `data` payload.
  */
-async function _interact(base, token, timeoutMs, agent, path, target, opts) {
+async function _interact(base, token, timeoutMs, path, rawTarget, opts = {}) {
+	const parsed = _parseTarget(rawTarget, opts);
 	/** @type {Record<string, unknown>} */
 	const body = {};
-	if (opts.testId && target != null) {
-		body.test_id = target;
-	} else if (target != null) {
-		body.path = target;
+	if (parsed.testId && parsed.target != null) {
+		body.test_id = parsed.target;
+	} else if (parsed.target != null) {
+		body.path = parsed.target;
 	}
 	for (const k of /** @type {const} */ (["text", "key"])) {
 		if (opts[k] !== undefined) {
 			body[k] = opts[k];
 		}
 	}
-	const data = await _request(base, token, timeoutMs, agent, path, { method: "POST", body });
-	await _request(base, token, timeoutMs, agent, "/wait/frames?frames=1");
+	const data = await _request(base, token, timeoutMs, path, { method: "POST", body });
+	await _request(base, token, timeoutMs, "/wait/frames?frames=1");
 	return data;
 }

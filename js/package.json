@@ -7,6 +7,9 @@
     "cucumber",
     "cli"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --allowJs --checkJs core/test/types.test.ts",
     "test:unit": "node --test core/test/client.test.js core/test/interactions.test.js cucumber/test/cucumber.test.js cli/test/cli.test.js",

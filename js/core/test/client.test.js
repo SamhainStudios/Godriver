@@ -243,3 +243,24 @@ test("state and dev methods send correct bodies", async () => {
 		m.mock.restore();
 	}
 });
+
+test("test_id: prefix syntax and loadScene path normalization", async () => {
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/input/click": { status: 200, body: JSON.stringify({ ok: true, data: { injected: true } }) },
+		"/wait/frames": { status: 200, body: JSON.stringify({ ok: true, data: { frames: 1 } }) },
+		"/scene/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: "res://scenes/main.tscn", scene_ready: true } }) },
+	});
+	try {
+		const driver = await connect(9090);
+		await driver.click("test_id:btn_submit");
+		await driver.loadScene("scenes/main.tscn");
+
+		// Click call: calls[1] is /input/click, calls[2] is /wait/frames
+		assert.equal(JSON.parse(calls[1].init.body).test_id, "btn_submit");
+		// loadScene call: calls[3] is /scene/load with normalized res:// path
+		assert.equal(JSON.parse(calls[3].init.body).path, "res://scenes/main.tscn");
+	} finally {
+		m.mock.restore();
+	}
+});

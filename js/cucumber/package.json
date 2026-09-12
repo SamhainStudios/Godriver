@@ -11,7 +11,7 @@
     "./steps": "./src/steps.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24"
   },
   "files": [
     "src",
