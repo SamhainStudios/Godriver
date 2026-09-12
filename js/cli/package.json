@@ -1,0 +1,29 @@
+{
+  "name": "@godriver/cli",
+  "version": "0.1.0",
+  "description": "Command line interface and fail-fast watchdog runner for Godriver",
+  "type": "module",
+  "bin": {
+    "godriver": "./bin/godriver.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./launcher": "./src/launcher.js",
+    "./watchdog": "./src/watchdog.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@godriver/core": "file:../core",
+    "@godriver/cucumber": "file:../cucumber"
+  },
+  "license": "MIT"
+}
