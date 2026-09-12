@@ -35,9 +35,9 @@ jobs:
             - name: Create Release Pull Request or Publish
               uses: changesets/action@v1
               with:
-                  # npm workspace root lives in js/ — cd there for the changesets CLI
-                  publish: cd js && npm run changeset:publish
-                  version: cd js && npm run changeset:version
+                  cwd: js
+                  publish: npm run changeset:publish
+                  version: npm run changeset:version
                   commit: 'chore: version packages'
                   title: 'chore: version packages'
               env:
