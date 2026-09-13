@@ -8,11 +8,11 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 
 ## Features
 
-* Zero-Dependency Core: `@godriver/core` has zero external runtime dependencies—built entirely on Node 24+ native `fetch`.
+* Zero-Dependency Core: `@godriver/core` has zero external runtime dependencies, built entirely on Node 24+ native `fetch`.
 * Playwright-Parity Assertions: Auto-retrying assertion polling (`assertVisible`, `assertEnabled`, `assertProperty`) that resolves timing issues and prevents flaky tests.
-* Input Injection: Click `Control` nodes or `Area2D` hotspots, type text into `LineEdit` controls, and dispatch `InputMap` actions seamlessly under `--headless`.
-* **Determinism Controls**: Seed global RNG (`/dev/seed`), control `Engine.time_scale`, and pause physics or processing while keeping HTTP inspection active.
-* **Fail-Fast Watchdog**: `@godriver/cli` monitors engine health during test execution and dumps `stderr` logs on engine stalls or crashes.
+* Input Injection: Click `Control` nodes or `Area2D` hotspots, type text into `LineEdit` controls, and dispatch `InputMap` actions under `--headless`.
+* Determinism Controls: Seed global RNG (`/dev/seed`), control `Engine.time_scale`, and pause physics or processing while keeping HTTP inspection active.
+* Fail-Fast Watchdog: `@godriver/cli` monitors engine health during test execution and dumps `stderr` logs on engine stalls or crashes.
 
 ---
 
@@ -20,10 +20,10 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 
 | Package / Module | Description | Path |
 |---|---|---|
-| **Addon** | GDScript HTTP server addon for Godot 4 | [`addons/godriver`](addons/godriver) |
-| **`@godriver/core`** | Zero-dependency Node 24+ HTTP client | [`js/core`](js/core) |
-| **`@godriver/cucumber`** | BDD `GodotWorld`, lifecycle hooks, and step library | [`js/cucumber`](js/cucumber) |
-| **`@godriver/cli`** | Engine process launcher & fail-fast watchdog runner | [`js/cli`](js/cli) |
+| Addon | GDScript HTTP server addon for Godot 4 | [`addons/godriver`](addons/godriver) |
+| `@godriver/core` | Zero-dependency Node 24+ HTTP client | [`js/core`](js/core) |
+| `@godriver/cucumber` | BDD `GodotWorld`, lifecycle hooks, and step library | [`js/cucumber`](js/cucumber) |
+| `@godriver/cli` | Engine process launcher & fail-fast watchdog runner | [`js/cli`](js/cli) |
 
 ---
 
@@ -32,9 +32,9 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 ### 1. Copy Addons to your Godot Project
 Copy both required folders into your Godot project's `addons/` directory:
 - `addons/godriver`
-- `addons/godriver`
+- `addons/godottpd`
 
-Then open **Project -> Project Settings -> Plugins** in Godot and enable **Godriver Test Driver**.
+Then open Project -> Project Settings -> Plugins in Godot and enable Godriver Test Driver.
 
 ### 2. Add `.gdignore` to `node_modules`
 Prevent Godot from attempting to import JS files as engine resources by creating an empty `.gdignore` in your JS directory:
@@ -78,6 +78,6 @@ driver.close();
 
 ## Documentation & Links
 
-* [Getting Started Guide](docs/getting-started.md) — Step-by-step setup, `setState` order, and GDScript setter patterns.
-* [HTTP Specification (SPEC v0.1)](spec/SPEC.md) — Complete HTTP endpoint envelope & contract reference.
-* [License](LICENSE) — MIT License.
+* [Getting Started Guide](docs/getting-started.md): Step-by-step setup, `setState` order, and GDScript setter patterns.
+* [HTTP Specification (SPEC v0.1)](spec/SPEC.md): Complete HTTP endpoint envelope and contract reference.
+* [License](LICENSE): MIT License.
