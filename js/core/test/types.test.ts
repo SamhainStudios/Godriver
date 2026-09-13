@@ -18,7 +18,10 @@ async function use(d: Driver): Promise<void> {
 	await d.click("/root/Button", { testId: false });
 	await d.type("/root/Input", "hello");
 	await d.pressKey("ui_accept");
-	await d.loadScene("res://main.tscn");
+	// Reset & Scene
+	await d.reset();
+	await d.reset({ tweenMode: "await" });
+	await d.loadScene("res://main.tscn", { tweenMode: "kill" });
 	await d.layout("/root/Main");
 
 	// Signals
@@ -30,7 +33,9 @@ async function use(d: Driver): Promise<void> {
 	await d.assertVisible("/root/Main");
 	await d.assertEnabled("/root/Main");
 	await d.assertProperty("/root/Main", "name", "Main");
+	await d.assertText("/root/Main", "Hello");
 	await d.waitFrames(2);
+	await d.waitTween({ timeout: 1000 });
 	await d.waitVisible("/root/Main");
 	await d.waitHidden("/root/Main");
 

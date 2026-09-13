@@ -264,3 +264,33 @@ test("test_id: prefix syntax and loadScene path normalization", async () => {
 		m.mock.restore();
 	}
 });
+
+test("reset, loadScene with tweenMode, assertText, and waitTween", async () => {
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/reset": { status: 200, body: JSON.stringify({ ok: true, data: { reloaded_scene: "res://Main.tscn", scene_ready: true } }) },
+		"/scene/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: "res://Level.tscn", scene_ready: true } }) },
+		"/assert/property": { status: 200, body: JSON.stringify({ ok: true, data: { target: "/root/Label", property: "text", actual: "Score: 10", expected: "Score: 10", passed: true } }) },
+		"/wait/tween": { status: 200, body: JSON.stringify({ ok: true, data: { tweens_remaining: 0 } }) },
+	});
+	try {
+		const driver = await connect(9090);
+		const resetRes = await driver.reset({ tweenMode: "await" });
+		assert.equal(resetRes.reloaded_scene, "res://Main.tscn");
+		assert.equal(JSON.parse(calls[1].init.body).tween_mode, "await");
+
+		await driver.loadScene("res://Level.tscn", { tweenMode: "kill" });
+		assert.equal(JSON.parse(calls[2].init.body).tween_mode, "kill");
+
+		const textRes = await driver.assertText("/root/Label", "Score: 10");
+		assert.equal(textRes.passed, true);
+		assert.equal(JSON.parse(calls[3].init.body).property, "text");
+		assert.equal(JSON.parse(calls[3].init.body).expected, "Score: 10");
+
+		const tweenRes = await driver.waitTween({ timeout: 3000 });
+		assert.equal(tweenRes.tweens_remaining, 0);
+		assert.equal(JSON.parse(calls[4].init.body).timeout, 3000);
+	} finally {
+		m.mock.restore();
+	}
+});

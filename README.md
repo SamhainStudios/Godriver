@@ -9,7 +9,8 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 ## Features
 
 * Zero-Dependency Core: `@godriver/core` has zero external runtime dependencies, built entirely on Node 24+ native `fetch`.
-* Playwright-Parity Assertions: Auto-retrying assertion polling (`assertVisible`, `assertEnabled`, `assertProperty`) that resolves timing issues and prevents flaky tests.
+* Playwright-Parity Assertions: Auto-retrying assertion polling (`assertVisible`, `assertEnabled`, `assertProperty`, `assertText`) that resolves timing issues and prevents flaky tests.
+* Resilient Target Resolution: Target nodes by scene tree path or metadata-based `test_id` (`driver.click("test_id:btn_submit")`).
 * Input Injection: Click `Control` nodes or `Area2D` hotspots, type text into `LineEdit` controls, and dispatch `InputMap` actions under `--headless`.
 * Determinism Controls: Seed global RNG (`/dev/seed`), control `Engine.time_scale`, and pause physics or processing while keeping HTTP inspection active.
 * Fail-Fast Watchdog: `@godriver/cli` monitors engine health during test execution and dumps `stderr` logs on engine stalls or crashes.
@@ -63,21 +64,39 @@ import { connect } from "@godriver/core";
 // Connect to running Godot instance
 const driver = await connect(9999);
 
+// Reset scenario to clean baseline (reloads main scene, resets state autoloads)
+await driver.reset();
+
 // Inspect health & current scene
 const health = await driver.health();
 console.log(`Connected to Godot ${health.godot_version}`);
 
-// Click a button by test_id and assert label text
+// Click a button by test_id and assert text
 await driver.click("test_id:btn_submit");
-await driver.assertProperty("/root/Main/StatusLabel", "text", "Submitted!");
+await driver.assertText("test_id:status_label", "Submitted!");
+
+// Transition to a new level and wait for dissolve tweens to finish
+await driver.loadScene("scenes/level_2.tscn", { tweenMode: "await" });
 
 driver.close();
 ```
 
 ---
 
+## Headless Mode Considerations
+
+Running tests under Godot's `--headless` mode has specific engine characteristics:
+- **Input & Hotspots**: `Control` clicking, typing, and `Area2D` collision object clicking work out-of-the-box. Godriver includes an automatic direct delivery fallback for `Area2D` hotspots in headless mode where `_process_picking()` may not tick.
+- **Scene Changes**: Button handlers that call `change_scene_to_file()` are fully supported and will not crash the runner.
+- **Audio**: No audio hardware exists under `--headless`; tests should avoid asserting on audio playback state.
+- **Rendering**: Screen visual diffs require a virtual framebuffer (`xvfb` / software OpenGL).
+
+---
+
 ## Documentation & Links
 
-* [Getting Started Guide](docs/getting-started.md): Step-by-step setup, `setState` order, and GDScript setter patterns.
-* [HTTP Specification (SPEC v0.1)](spec/SPEC.md): Complete HTTP endpoint envelope and contract reference.
+* [Getting Started Guide](docs/getting-started.md): 3-step setup, `setState` conventions, and `test_id` usage.
+* [API Reference](docs/api-reference.md): Complete reference for all HTTP endpoints and request/response shapes.
+* [Troubleshooting Guide](docs/troubleshooting.md): Solutions for common pitfalls (hotspot clicking, scene changes, state leakage).
+* [HTTP Specification (SPEC v0.1)](spec/SPEC.md): Formal HTTP endpoint contract and architectural guarantees.
 * [License](LICENSE): MIT License.

@@ -103,7 +103,7 @@ Resets the game to a clean baseline for scenario isolation.
   1. Resolve all pending blocked `/signal/wait`s immediately with `{"signaled": false, "reset": true}` (never leave them hanging for the 30s timeout)
   2. Disconnect all active signal watchers
   3. Reset `Engine.time_scale` to `1.0` and `get_tree().paused` to `false`
-  4. Reset the state autoload to its initial property values (autoloads persist across scene changes — a scene reload alone does NOT reset them)
+  4. Reset the state autoload to its initial property values (autoloads persist across scene changes — a scene reload alone does NOT reset them). Also resets any additional autoloads configured in project setting `godriver/reset_autoloads` (PackedStringArray) such as TimeState, InventoryManager, etc. Autoloads omitted from this list (e.g. AudioManager, SettingsManager) are preserved. Missing extra autoloads are reported in `data.missing_autoloads`.
   5. Load the main scene via `change_scene_to_file(ProjectSettings.get_setting("application/run/main_scene"))` — NOT `reload_current_scene()`, which reloads whatever scene is current after `/scene/load`
   6. Handle tweens per `tween_mode`: `"kill"` (default) — iterate `get_tree().get_processed_tweens()` and `kill()` each (tweens created via `SceneTree.create_tween()` are bound to the tree, NOT the scene, and survive `change_scene_to_file`; callbacks would leak into the new scenario). `"await"` — wait for signal-bound tweens (created via 4.7's `Tween.tween_await(signal)`) to complete before proceeding; use only when tween completion is part of the fixture semantics. A reset must never hang by default, so `"kill"` is the default.
   7. Sweep orphan nodes: `queue_free()` (NEVER `free()` — deferred teardown avoids destroying nodes while pending callables/signals are still in the frame's call queue) every direct child of `/root` NOT on the allowlist: the main scene instance, the test driver autoload, all autoloads registered in `ProjectSettings` (`autoload/*`), engine auto-named internal nodes (`@`-prefixed — debug helpers, test-runner hosts), and nodes carrying a `godriver_keep` metadata key (escape hatch for test harnesses that live under `/root`)
@@ -376,10 +376,11 @@ curl -X POST http://127.0.0.1:9090/input/key \
 
 Change the current scene to an arbitrary scene with `/reset`'s readiness semantics (§5.0): **200 only after the new scene is live and ready**; `504 SCENE_READY_TIMEOUT` on the bounded readiness wait; `503 SERVER_BUSY` while a scene transition is in flight (the in-flight guard is SHARED with `/reset` — a load and a reset must never interleave).
 
-- Body: `{"path": "res://game/levels/level_1.tscn"}`
+- Body: `{"path": "res://game/levels/level_1.tscn", "tween_mode": "none" | "await" | "kill"}` (`tween_mode` optional; default `"none"`)
 - Response: `{"ok": true, "data": {"loaded": "<path>", "scene_ready": true}}`
 - Readiness steps (shared with `/reset`): `change_scene_to_file` → await `process_frame` until `current_scene` changes → poll `is_node_ready()` (5s bound → 504)
-- **Difference from `/reset`**: load is a transition, not a cleanup — the tween-kill and orphan-sweep steps are SKIPPED (tests needing full isolation call `/reset`)
+- **Tween handling**: Default `"none"`. When `"await"`, waits for active SceneTree tweens to complete before returning 200 (useful for transition dissolves). When `"kill"`, terminates active tweens.
+- **Difference from `/reset`**: load is a transition, not a cleanup — orphan-sweep and state resets are SKIPPED (tests needing full isolation call `/reset`)
 - Errors: `400 MISSING_PARAM`, `404 SCENE_NOT_FOUND` (path is not a loadable PackedScene — `ResourceLoader.exists(path, "PackedScene")`), `504 SCENE_READY_TIMEOUT`, `503 SERVER_BUSY`
 - Out of scope (v0.1): additive scene instantiation (`add_child` scenes); PackedScene preloading cache behavior (§5.0 resource-cache block)
 
@@ -455,9 +456,19 @@ Evaluates an arbitrary node property value against an expected Variant value.
 - Response: `200 {"ok": true, "data": {"target": "<canonical_path>", "property": "<prop_name>", "actual": <serialized_value>, "expected": <serialized_value>, "passed": <bool>}}`
 - Errors: `400 MISSING_PARAM`, `404 NODE_NOT_FOUND`, `404 TEST_ID_NOT_FOUND`, `409 AMBIGUOUS_TEST_ID`, `404 PROPERTY_NOT_FOUND`.
 
-### 5.7 Waits (`/wait`, `/wait/frames`)
+### 5.7 Waits (`/wait/frames`, `/wait/tween`)
 
-**Documented with their implementing briefs (Phase 2).** Implementation note frozen here: `/wait/frames` awaits `get_tree().process_frame` N times; NEVER `Timer`s, `SceneTreeTimer`s, or thread sleeps, which are subject to `time_scale`/pause and would break the wait's own semantics. `process_frame` is also the pause-safe choice: the signal keeps ticking while `get_tree().paused = true` (the dispatcher runs with `PROCESS_MODE_ALWAYS`), whereas reliance on `physics_frame` under pause is not guaranteed across engine versions — frame-wait operations MUST advance via `process_frame` only.
+#### `GET /wait/frames?frames=N`
+
+Advances N engine process frames. Implementation note frozen here: `/wait/frames` awaits `get_tree().process_frame` N times; NEVER `Timer`s, `SceneTreeTimer`s, or thread sleeps, which are subject to `time_scale`/pause and would break the wait's own semantics. `process_frame` is also the pause-safe choice: the signal keeps ticking while `get_tree().paused = true` (the dispatcher runs with `PROCESS_MODE_ALWAYS`), whereas reliance on `physics_frame` under pause is not guaranteed across engine versions — frame-wait operations MUST advance via `process_frame` only.
+
+#### `POST /wait/tween`
+
+Wait for all active SceneTree tweens to complete (Issue #8). Blocks asynchronously on the main thread until `get_tree().get_processed_tweens().size() == 0` or timeout occurs.
+
+- Body: `{"timeout": 5000}` (optional; timeout bound in milliseconds, default 5000)
+- Response: `200 {"ok": true, "data": {"tweens_remaining": 0}}`
+- Errors: `504 TWEEN_TIMEOUT`
 
 ### 5.8 State (`GET /state`, `GET /state/schema`, `POST /state/set`)
 
@@ -621,6 +632,7 @@ curl http://127.0.0.1:9090/assets/loaded
 | Dictionary  | object                                         |                                  |
 | NodePath    | string                                         |                                  |
 
+- **Dictionary integer key coercion (Bug #6)**: JSON mandates string object keys (`"0"`, `"1"`). When setting a `Dictionary` property, the handler auto-coerces string keys to `int` if the existing dictionary on the target uses integer keys or if all incoming keys are valid integer strings. Coercion is recursive for nested dictionaries (e.g. `{0: {1: [...]}}`).
 - `null` writes are **type-dependent**:
   - **Allowed** when the target property's declared type is nullable — `Object`, `Resource`, Variant-typed (`Variant`), or untyped properties. This is the idiomatic clear (e.g. `{"equipped_weapon": null}` unequips).
   - **Rejected** (`400 NULL_NOT_ALLOWED`) for value types — `int`, `float`, `bool`, `String`, `Vector*`, `Color`, `NodePath` — where null has no meaning and accidental clears are worse than an explicit zero-value write.

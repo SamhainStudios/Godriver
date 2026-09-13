@@ -65,6 +65,8 @@ var routes := {
 	# GTD-026: GET /wait/frames?frames=N (SPEC §5.7) — long-poll; the worker
 	# blocks until N process_frames elapse (pause-safe; never timers/sleeps).
 	"/wait/frames": {"get": "wait_frames"},
+	# POST /wait/tween (Issue #8) — async wait for all SceneTree tweens to complete.
+	"/wait/tween": {"post": "wait_tween"},
 	# GTD-031: /signal/watch, /signal/poll, /signal/wait (SPEC §5.5).
 	"/signal/watch": {"post": "signal_watch"},
 	"/signal/poll": {"get": "signal_poll", "post": "signal_poll"},
@@ -173,6 +175,8 @@ func dispatch(handler_name: String, req: HttpRequest, res: HttpResponse) -> bool
 		return _dispatch_scene_load(req, res)
 	if handler_name == "wait_frames":
 		return _dispatch_wait_frames(req, res)
+	if handler_name == "wait_tween":
+		return _dispatch_wait_tween(req, res)
 	if handler_name == "signal_wait":
 		return _dispatch_signal_wait(req, res)
 	var args := _extract_args(handler_name, req)
@@ -450,14 +454,16 @@ func _start_reset(tween_mode: String, slot: Dictionary, slot_mutex: Mutex) -> Di
 ## interleave (both mutate current_scene).
 func _dispatch_scene_load(req: HttpRequest, res: HttpResponse) -> bool:
 	var path := ""
+	var tween_mode := "none"
 	var body: Variant = req.get_body_parsed()
 	if not (body is Dictionary) and not String(req.body).is_empty():
 		body = JSON.parse_string(String(req.body))
 	if body is Dictionary:
 		path = str(body.get("path", ""))
+		tween_mode = str(body.get("tween_mode", "none"))
 	var slot := {"done": false, "result": null}
 	var slot_mutex := Mutex.new()
-	var start_result: Variant = dispatcher.submit(Callable(self, "_start_scene_load").bind(path, slot, slot_mutex))
+	var start_result: Variant = dispatcher.submit(Callable(self, "_start_scene_load").bind(path, tween_mode, slot, slot_mutex))
 	if start_result is Dictionary and start_result.has("code") and int(start_result.code) != 200:
 		res.json(int(start_result.code), start_result.body)
 		return true
@@ -479,7 +485,7 @@ func _dispatch_scene_load(req: HttpRequest, res: HttpResponse) -> bool:
 
 
 ## Main-thread sync start-task (same contract as _start_reset; shared guard).
-func _start_scene_load(path: String, slot: Dictionary, slot_mutex: Mutex) -> Dictionary:
+func _start_scene_load(path: String, tween_mode: String, slot: Dictionary, slot_mutex: Mutex) -> Dictionary:
 	if _reset_in_flight:
 		return {
 			"code": 503,
@@ -488,6 +494,49 @@ func _start_scene_load(path: String, slot: Dictionary, slot_mutex: Mutex) -> Dic
 	_reset_in_flight = true
 	TestDriverSceneHandler.load_scene(get_tree(), path, func(result: Variant):
 		_reset_in_flight = false
+		slot_mutex.lock()
+		slot.done = true
+		slot.result = result
+		slot_mutex.unlock(), tween_mode)
+	return {"code": 200, "body": {}}
+
+
+# --- /wait/tween (Issue #8) — async dispatch ---
+
+## Worker-thread entry for POST /wait/tween. Waits for all SceneTree tweens
+## to finish on the main thread, or returns 504 on timeout.
+func _dispatch_wait_tween(req: HttpRequest, res: HttpResponse) -> bool:
+	var timeout_ms := 5000
+	var body: Variant = req.get_body_parsed()
+	if not (body is Dictionary) and not String(req.body).is_empty():
+		body = JSON.parse_string(String(req.body))
+	if body is Dictionary and body.has("timeout"):
+		timeout_ms = int(body["timeout"])
+	var slot := {"done": false, "result": null}
+	var slot_mutex := Mutex.new()
+	var start_result: Variant = dispatcher.submit(Callable(self, "_start_wait_tween").bind(timeout_ms, slot, slot_mutex))
+	if start_result is Dictionary and start_result.has("code") and int(start_result.code) != 200:
+		res.json(int(start_result.code), start_result.body)
+		return true
+	var deadline := Time.get_ticks_msec() + timeout_ms + 2000
+	while Time.get_ticks_msec() < deadline:
+		slot_mutex.lock()
+		var done: bool = slot.done
+		var result: Variant = slot.result
+		slot_mutex.unlock()
+		if done:
+			if result is Dictionary and result.has("code") and result.has("body"):
+				res.json(int(result.code), result.body)
+			else:
+				res.json(500, {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": "wait/tween coroutine crashed or returned malformed data"}})
+			return true
+		OS.delay_msec(25)
+	res.json(504, {"ok": false, "error": {"code": "TWEEN_TIMEOUT", "message": "wait/tween exceeded the wait bound (%dms)" % timeout_ms}})
+	return true
+
+
+func _start_wait_tween(timeout_ms: int, slot: Dictionary, slot_mutex: Mutex) -> Dictionary:
+	TestDriverSceneHandler.wait_tweens(get_tree(), timeout_ms, func(result: Variant):
 		slot_mutex.lock()
 		slot.done = true
 		slot.result = result

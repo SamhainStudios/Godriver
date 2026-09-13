@@ -52,6 +52,16 @@ static func reset(tree: SceneTree, tween_mode: String, done: Callable) -> void:
 	tree.paused = false
 	# Step 4: state autoload reset (fresh script instance → copy script vars).
 	var state_missing := _reset_state_autoload(tree)
+	# Step 4b (Bug #3): reset additional autoloads from the configured list.
+	# Game devs configure which autoloads carry test-relevant state (e.g.
+	# TimeState, InventoryManager) via godriver/reset_autoloads. Autoloads
+	# NOT in this list (AudioManager, SettingsManager) are left untouched.
+	var extra_autoloads: PackedStringArray = ProjectSettings.get_setting(
+		"godriver/reset_autoloads", PackedStringArray())
+	var extra_missing: Array[String] = []
+	for autoload_name in extra_autoloads:
+		if _reset_named_autoload(tree, autoload_name):
+			extra_missing.append(autoload_name)
 	# Step 5: load the MAIN scene — NOT reload_current_scene(), which would
 	# reload whatever scene is current after /scene/load (§5.0).
 	var main_scene: String = ProjectSettings.get_setting("application/run/main_scene", "")
@@ -101,6 +111,8 @@ static func reset(tree: SceneTree, tween_mode: String, done: Callable) -> void:
 			"body": {"ok": false, "error": {"code": "STATE_AUTOLOAD_MISSING", "message": "reset completed, but state autoload is missing (reset proceeded without the state step)"}},
 		})
 		return
+	if not extra_missing.is_empty():
+		result.body.data["missing_autoloads"] = extra_missing
 	result.body.data.reloaded_scene = main_scene
 	done.call(result)
 	# GTD-024: record the transition in the driver-tracked asset inventory.
@@ -113,6 +125,12 @@ static func reset(tree: SceneTree, tween_mode: String, done: Callable) -> void:
 ## Returns true when the autoload is missing (→ 409, reset still proceeds).
 static func _reset_state_autoload(tree: SceneTree) -> bool:
 	var autoload_name: String = ProjectSettings.get_setting("godriver/state_autoload", "GameState")
+	return _reset_named_autoload(tree, autoload_name)
+
+
+## Reset a specific named autoload singleton to its initial values.
+## Returns true if the autoload node or its script is missing.
+static func _reset_named_autoload(tree: SceneTree, autoload_name: String) -> bool:
 	var node := tree.root.get_node_or_null(NodePath("/root/" + autoload_name))
 	if node == null or node.get_script() == null:
 		return true
@@ -179,7 +197,7 @@ static func _scene_timeout(message: String) -> Dictionary:
 ## Difference from /reset: load is a TRANSITION, not a cleanup — the tween
 ## kill and orphan-sweep steps are SKIPPED (those belong to the isolation
 ## contract of /reset; a test that needs them calls /reset).
-static func load_scene(tree: SceneTree, path: String, done: Callable) -> void:
+static func load_scene(tree: SceneTree, path: String, done: Callable, tween_mode: String = "none") -> void:
 	if path.is_empty():
 		done.call({
 			"code": 400,
@@ -210,9 +228,48 @@ static func load_scene(tree: SceneTree, path: String, done: Callable) -> void:
 			done.call(_scene_timeout("new scene not ready within %dms (async _ready?)" % RESET_READINESS_MS))
 			return
 		await tree.process_frame
+	# Optional tween handling (Issue #4):
+	if tween_mode == "await":
+		var tween_deadline := Time.get_ticks_msec() + RESET_READINESS_MS
+		while tree.get_processed_tweens().size() > 0:
+			if Time.get_ticks_msec() > tween_deadline:
+				break
+			await tree.process_frame
+	if tween_mode == "kill" or tween_mode == "await":
+		for tween in tree.get_processed_tweens():
+			tween.kill()
 	done.call({
 		"code": 200,
 		"body": {"ok": true, "data": {"loaded": path, "scene_ready": true}},
 	})
 	# GTD-024: record the transition in the driver-tracked asset inventory.
 	TestDriverAssetsHandler.track(path, "scene_load")
+
+
+## POST /wait/tween — wait for all active SceneTree tweens to complete (Issue #8).
+## ASYNC: coroutine awaiting process_frame.
+static func wait_tweens(tree: SceneTree, timeout_ms: int, done: Callable) -> void:
+	var deadline := Time.get_ticks_msec() + timeout_ms
+	while tree.get_processed_tweens().size() > 0:
+		if Time.get_ticks_msec() > deadline:
+			done.call({
+				"code": 504,
+				"body": {
+					"ok": false,
+					"error": {
+						"code": "TWEEN_TIMEOUT",
+						"message": "tweens did not complete within %dms" % timeout_ms
+					}
+				}
+			})
+			return
+		await tree.process_frame
+	done.call({
+		"code": 200,
+		"body": {
+			"ok": true,
+			"data": {
+				"tweens_remaining": 0
+			}
+		}
+	})

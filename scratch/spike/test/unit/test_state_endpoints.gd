@@ -193,3 +193,37 @@ func test_error_responses() -> void:
 	var res_missing := await _http_post("/state/set", JSON.stringify({"target": path}))
 	assert_int(res_missing.code).is_equal(400)
 	assert_str(_parsed(res_missing).get("error", {}).get("code", "")).is_equal("MISSING_PARAM")
+
+
+func test_dictionary_int_key_coercion() -> void:
+	var script := GDScript.new()
+	script.source_code = """
+extends Node
+var inventories: Dictionary = {0: ["theremin"]}
+"""
+	script.reload()
+	var node := Node.new()
+	node.name = "DictFixture"
+	node.set_script(script)
+	_fixture = node
+	get_tree().root.add_child(node)
+	var path := String(node.get_path())
+
+	# POST string keys from JSON {"0": ["key", "map"], "1": ["lantern"]}
+	var res := await _http_post("/state/set", JSON.stringify({
+		"target": path,
+		"values": {
+			"inventories": {
+				"0": ["key", "map"],
+				"1": ["lantern"]
+			}
+		}
+	}))
+	assert_int(res.code).is_equal(200)
+	var inv: Dictionary = node.get("inventories")
+	assert_bool(inv.has(0)).is_true()
+	assert_bool(inv.has(1)).is_true()
+	assert_bool(inv.has("0")).is_false()
+	assert_array(inv[0]).is_equal(["key", "map"])
+	assert_array(inv[1]).is_equal(["lantern"])
+

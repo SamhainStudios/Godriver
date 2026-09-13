@@ -52,6 +52,7 @@ export class ConnectionError extends Error {
  * @property {string} [host="127.0.0.1"] Host the game listens on (addon binds 127.0.0.1).
  * @property {string} [token=""] Bearer token when the addon was launched with --test-driver-token.
  * @property {number} [timeoutMs=5000] Per-request timeout in milliseconds.
+ * @property {number} [maxSockets] Deprecated / ignored connection pool limit.
  */
 
 /**
@@ -77,13 +78,15 @@ export class ConnectionError extends Error {
  *   Low-level typed request: unwraps the envelope, returns `data`, throws typed errors.
  * @property {() => Promise<{status: string, godot_version: string, spec_version: string}>} health
  *   GET /health — read server status.
+ * @property {(opts?: {tweenMode?: "kill"|"await"}) => Promise<{reloaded_scene: string, scene_ready: boolean, missing_autoloads?: string[]}>} reset
+ *   POST /reset — full scenario isolation reset.
  * @property {(target: string, opts?: {testId?: boolean}) => Promise<{injected: boolean, target: string, viewport?: string}>} click
  *   POST /input/click + one-frame auto-wait (SPEC §6). target = node path, or test_id when opts.testId.
  * @property {(target: string, text: string, opts?: {testId?: boolean}) => Promise<{injected: boolean, target: string}>} type
  *   POST /input/type + one-frame auto-wait.
  * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<{injected: boolean, key: string, target?: string}>} pressKey
  *   POST /input/key + one-frame auto-wait; opts.target focuses a Control first.
- * @property {(path: string) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
+ * @property {(path: string, opts?: {tweenMode?: "kill"|"await"|"none"}) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
  *   POST /scene/load — resolves only when the new scene is ready.
  * @property {(target: string, opts?: {testId?: boolean, depth?: number}) => Promise<Record<string, unknown>>} layout
  *   GET /ui/layout — Control layout inspection.
@@ -99,8 +102,12 @@ export class ConnectionError extends Error {
  *   Auto-retrying /assert/enabled assertion.
  * @property {(target: string, property: string, expected: unknown, opts?: {testId?: boolean, timeoutMs?: number, pollIntervalMs?: number}) => Promise<{target: string, property: string, actual: unknown, expected: unknown, passed: boolean}>} assertProperty
  *   Auto-retrying /assert/property assertion.
+ * @property {(target: string, expected: unknown, opts?: {testId?: boolean, timeoutMs?: number, pollIntervalMs?: number}) => Promise<{target: string, property: string, actual: unknown, expected: unknown, passed: boolean}>} assertText
+ *   Auto-retrying /assert/property assertion for the "text" property.
  * @property {(frames?: number) => Promise<{frames: number, elapsed: number}>} waitFrames
  *   GET /wait/frames?frames=N — advance N process_frames.
+ * @property {(opts?: {timeout?: number, timeoutMs?: number}) => Promise<{tweens_remaining: number}>} waitTween
+ *   POST /wait/tween — wait for all active SceneTree tweens to finish.
  * @property {(target: string, opts?: {testId?: boolean, timeoutMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} waitVisible
  *   Alias for assertVisible(target, { ...opts, expected: true })
  * @property {(target: string, opts?: {testId?: boolean, timeoutMs?: number}) => Promise<{target: string, actual: boolean, expected: boolean, passed: boolean}>} waitHidden
@@ -253,6 +260,13 @@ export async function connect(port, options = {}) {
 		request: (path, init = {}) => _request(base, token, init.timeoutMs ?? timeoutMs, path, init),
 		/** @type {Driver["health"]} */
 		health: () => Promise.resolve(healthData),
+		/** @type {Driver["reset"]} */
+		reset: (opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = {};
+			if (opts.tweenMode) body.tween_mode = opts.tweenMode;
+			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/reset", { method: "POST", body }));
+		},
 		/** @type {Driver["click"]} */
 		click: (target, opts = {}) =>
 			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, "/input/click", target, opts)),
@@ -263,10 +277,13 @@ export async function connect(port, options = {}) {
 		pressKey: (key, opts = {}) =>
 			/** @type {Promise<any>} */ (_interact(base, token, timeoutMs, "/input/key", opts.target ?? null, { ...opts, key })),
 		/** @type {Driver["loadScene"]} */
-		loadScene: (path) => {
+		loadScene: (path, opts = {}) => {
 			const normalizedPath = path.startsWith("res://") || path.startsWith("user://") ? path : `res://${path.replace(/^\//, "")}`;
+			/** @type {Record<string, unknown>} */
+			const body = { path: normalizedPath };
+			if (opts.tweenMode) body.tween_mode = opts.tweenMode;
 			return /** @type {Promise<{loaded: string, scene_ready: boolean}>} */ (
-				_request(base, token, timeoutMs, "/scene/load", { method: "POST", body: { path: normalizedPath } })
+				_request(base, token, timeoutMs, "/scene/load", { method: "POST", body })
 			);
 		},
 		/** @type {Driver["layout"]} */
@@ -337,8 +354,18 @@ export async function connect(port, options = {}) {
 			else body.path = parsed.target;
 			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/property", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
+		/** @type {Driver["assertText"]} */
+		assertText: (target, expected, opts = {}) =>
+			driver.assertProperty(target, "text", expected, opts),
 		/** @type {Driver["waitFrames"]} */
 		waitFrames: (frames = 1) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/wait/frames?frames=${frames}`)),
+		/** @type {Driver["waitTween"]} */
+		waitTween: (opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = {};
+			if (opts.timeout !== undefined) body.timeout = opts.timeout;
+			return /** @type {Promise<any>} */ (_request(base, token, opts.timeoutMs ?? timeoutMs, "/wait/tween", { method: "POST", body }));
+		},
 		/** @type {Driver["waitVisible"]} */
 		waitVisible: (target, opts = {}) => driver.assertVisible(target, { ...opts, expected: true }),
 		/** @type {Driver["waitHidden"]} */

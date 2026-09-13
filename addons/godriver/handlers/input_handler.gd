@@ -127,6 +127,11 @@ static func click(tree: SceneTree, args: Dictionary) -> Dictionary:
 		return {"code": t.code, "body": {"ok": false, "error": t.error}}
 	var node: Node = t.node
 	if node is Control:
+		# Capture viewport path BEFORE injection — button handlers run
+		# synchronously during push_input and may trigger change_scene_to_file(),
+		# freeing the node before we build the response (Bug #2).
+		var vp := (node as Control).get_viewport()
+		var vp_path := String(vp.get_path()) if vp else ""
 		var err := _click_control(root, node as Control)
 		if not err.is_empty():
 			return {
@@ -135,9 +140,12 @@ static func click(tree: SceneTree, args: Dictionary) -> Dictionary:
 			}
 		return {
 			"code": 200,
-			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": String((node as Control).get_viewport().get_path()), "mode": "gui"}},
+			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": vp_path, "mode": "gui"}},
 		}
 	if node is CollisionObject2D:
+		# Same pre-capture as the Control path (Bug #2).
+		var vp := (node as CollisionObject2D).get_viewport()
+		var vp_path := String(vp.get_path()) if vp else ""
 		var err2 := _click_collision_object(root, node as CollisionObject2D)
 		if not err2.is_empty():
 			if err2.begins_with("PICKING_DISABLED:"):
@@ -151,7 +159,7 @@ static func click(tree: SceneTree, args: Dictionary) -> Dictionary:
 			}
 		return {
 			"code": 200,
-			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": String((node as CollisionObject2D).get_viewport().get_path()), "mode": "picking"}},
+			"body": {"ok": true, "data": {"injected": true, "target": t.path, "viewport": vp_path, "mode": "picking"}},
 		}
 	return {
 		"code": 400,
@@ -260,8 +268,20 @@ static func _click_collision_object(root: Node, co: CollisionObject2D) -> String
 	# Press + release: unconsumed by GUI (no Control at the point) → queued
 	# into physics_picking_events by _push_unhandled_input_internal →
 	# delivered by _process_picking on the next physics frame(s).
-	viewport.push_input(_make_mouse_button(local_pos, local_pos, true), true)
+	var press_ev := _make_mouse_button(local_pos, local_pos, true)
+	viewport.push_input(press_ev, true)
 	viewport.push_input(_make_mouse_button(local_pos, local_pos, false), true)
+
+	# Bug #1 — Headless fallback: _process_picking() only runs on physics
+	# frames, which may not tick in --headless with no active physics bodies.
+	# Directly call _input_event on the CollisionObject2D to guarantee the
+	# input_event signal fires regardless of physics frame state.
+	# This is safe in windowed mode too — the signal may fire twice (once
+	# from _process_picking, once from here), but that matches a real
+	# double-tap scenario and game code should be idempotent anyway.
+	# CollisionObject2D._input_event(viewport, event, shape_idx) is the
+	# virtual method that _process_picking ultimately calls.
+	co._input_event(viewport, press_ev, 0)
 	return ""
 
 

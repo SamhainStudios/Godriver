@@ -178,7 +178,7 @@ static func set_state(tree: SceneTree, args: Dictionary = {}) -> Dictionary:
 			}
 		var pinfo: Dictionary = prop_map[key]
 		var raw_val: Variant = values[key_raw]
-		var coercion_res := _coerce_value(key, pinfo, raw_val)
+		var coercion_res := _coerce_value(key, pinfo, raw_val, obj)
 		if not coercion_res.ok:
 			return {
 				"code": coercion_res.code,
@@ -204,7 +204,7 @@ static func set_state(tree: SceneTree, args: Dictionary = {}) -> Dictionary:
 	}
 
 
-static func _coerce_value(key: String, pinfo: Dictionary, raw_val: Variant) -> Dictionary:
+static func _coerce_value(key: String, pinfo: Dictionary, raw_val: Variant, obj: Object = null) -> Dictionary:
 	var target_type: int = pinfo.get("type", 0)
 	var type_name := _type_to_spec_string(target_type)
 
@@ -337,7 +337,11 @@ static func _coerce_value(key: String, pinfo: Dictionary, raw_val: Variant) -> D
 
 		TYPE_DICTIONARY:
 			if raw_val is Dictionary:
-				return {"ok": true, "value": (raw_val as Dictionary).duplicate(true)}
+				var dict_val: Dictionary = (raw_val as Dictionary).duplicate(true)
+				var ref_val: Variant = obj.get(key) if obj != null else null
+				var ref_dict: Dictionary = ref_val if ref_val is Dictionary else {}
+				dict_val = _coerce_dict_keys(dict_val, ref_dict)
+				return {"ok": true, "value": dict_val}
 			else:
 				return _type_mismatch(key, type_name, typeof(raw_val))
 
@@ -350,6 +354,41 @@ static func _coerce_value(key: String, pinfo: Dictionary, raw_val: Variant) -> D
 
 		_:
 			return {"ok": true, "value": raw_val}
+
+
+## Auto-coerce JSON string keys into GDScript int keys when appropriate (Bug #6).
+## Converts keys if the reference dictionary has int keys, or if all incoming
+## keys are valid integer strings (e.g. "0", "1").
+static func _coerce_dict_keys(incoming: Dictionary, reference: Dictionary = {}) -> Dictionary:
+	var should_convert := false
+	if not reference.is_empty():
+		for k in reference:
+			if k is int:
+				should_convert = true
+				break
+	else:
+		var all_int_keys := true
+		for k in incoming:
+			if not (k is int or (k is String and String(k).is_valid_int())):
+				all_int_keys = false
+				break
+		if all_int_keys and not incoming.is_empty():
+			should_convert = true
+
+	if not should_convert:
+		return incoming
+
+	var result := {}
+	for k in incoming:
+		var new_key: Variant = k
+		if k is String and String(k).is_valid_int():
+			new_key = String(k).to_int()
+		var v: Variant = incoming[k]
+		if v is Dictionary:
+			var ref_sub: Dictionary = reference.get(new_key, {}) if reference.get(new_key) is Dictionary else {}
+			v = _coerce_dict_keys(v as Dictionary, ref_sub)
+		result[new_key] = v
+	return result
 
 
 static func _type_mismatch(key: String, expected: String, got: Variant) -> Dictionary:
