@@ -195,7 +195,7 @@ func dispatch(handler_name: String, req: HttpRequest, res: HttpResponse) -> bool
 			var content_type: String = result.get("content_type", "image/png")
 			if result.has("headers") and result.headers is Dictionary:
 				for h in result.headers:
-					res.set(StringName(h), result.headers[h])
+					res.headers[StringName(h)] = result.headers[h]
 			res.send_raw(code, result.raw, content_type)
 		elif result.has("body"):
 			res.json(code, result.body)
