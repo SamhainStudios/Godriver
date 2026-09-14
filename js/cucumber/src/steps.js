@@ -78,6 +78,24 @@ export function registerSteps(cucumberFramework) {
 		await driver.setState({ [key]: value });
 	});
 
+	// --- Arrangement (GTD-055 state seeding) ---
+	Given("the property {string} of {string} is {string}", async function (prop, target, valueStr) {
+		const driver = await this.initDriver();
+		/** @type {unknown} */
+		let value;
+		try {
+			value = JSON.parse(valueStr);
+		} catch {
+			value = valueStr;
+		}
+		await driver.setProperty(target, prop, value);
+	});
+
+	Given("I wait {int} frames", async function (frames) {
+		const driver = await this.initDriver();
+		await driver.waitFrames(frames);
+	});
+
 	When("I set time scale to {float}", async function (scale) {
 		const driver = await this.initDriver();
 		await driver.setTimeScale(scale);

@@ -48,4 +48,6 @@ test("registerSteps registers all ~15 step definitions", () => {
 	assert.ok(patterns.includes("I should see {string}"));
 	assert.ok(patterns.includes("I watch signal {string} on {string}"));
 	assert.ok(patterns.includes("I set time scale to {float}"));
+	assert.ok(patterns.includes("the property {string} of {string} is {string}"));
+	assert.ok(patterns.includes("I wait {int} frames"));
 });

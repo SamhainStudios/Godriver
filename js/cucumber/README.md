@@ -40,6 +40,8 @@ Set `GODRIVER_PORT` / `GODRIVER_HOST` to point the World's driver at the game
 | `When I watch signal {string} on {string}` / `Then I wait for signal {string} on {string}` | signal wait |
 | `When I set state {string} to {string}` | state write |
 | `When I set time scale to {float}` / `I pause the game` / `I unpause the game` | determinism controls |
+| Given the property {string} of {string} is {string} | state seeding via setProperty (GTD-055); value is JSON or plain string |
+| Given I wait {int} frames | frame-settle after arrangement |
 
 ## Visual steps (GTD-052)
 
@@ -55,3 +57,4 @@ Then the screen should match baseline "portrait" at test_id "hud_root"
 - `UPDATE_BASELINE=true` captures/regenerates baselines.
 
 See `docs/guides/visual-regression.md` for the full workflow.
+
