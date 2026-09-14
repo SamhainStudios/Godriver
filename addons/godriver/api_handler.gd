@@ -53,6 +53,9 @@ var routes := {
 	# GTD-021: POST /input/type + /input/key (SPEC §5.3).
 	"/input/type": {"post": "input_type"},
 	"/input/key": {"post": "input_key"},
+	# GTD-054: key down/up split (held-key testing).
+	"/input/key_down": {"post": "input_key_down"},
+	"/input/key_up": {"post": "input_key_up"},
 	"/state": {"get": "state"},
 	"/state/schema": {"get": "state_schema", "post": "state_schema"},
 	"/state/set": {"post": "state_set"},
@@ -155,7 +158,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load", "screenshot_capture", "screenshot_region", "window_resize":
+		"input_click", "input_type", "input_key", "input_key_down", "input_key_up", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load", "screenshot_capture", "screenshot_region", "window_resize":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -307,6 +310,15 @@ func _main_input_type(args: Dictionary) -> Dictionary:
 ## POST /input/key (GTD-021, SPEC §5.3/§6) — 200 = injected only.
 func _main_input_key(args: Dictionary) -> Dictionary:
 	return TestDriverInputHandler.key(get_tree(), args)
+
+
+## POST /input/key_down + /input/key_up (GTD-054, SPEC §5.3) - held-key split.
+func _main_input_key_down(args: Dictionary) -> Dictionary:
+	return TestDriverInputHandler.key_down(get_tree(), args)
+
+
+func _main_input_key_up(args: Dictionary) -> Dictionary:
+	return TestDriverInputHandler.key_up(get_tree(), args)
 
 
 ## GET /state (GTD-015/033, SPEC §5.8).
@@ -665,4 +677,6 @@ func _main_window_resize(args: Dictionary) -> Dictionary:
 
 func _main_window_state(_args: Dictionary) -> Dictionary:
 	return TestDriverWindowHandler.state(get_tree())
+
+
 

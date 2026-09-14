@@ -85,6 +85,10 @@ export class ConnectionError extends Error {
  * @property {(target: string, text: string, opts?: {testId?: boolean}) => Promise<{injected: boolean, target: string}>} type
  *   POST /input/type + one-frame auto-wait.
  * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<{injected: boolean, key: string, target?: string}>} pressKey
+ * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<{injected: boolean, key: string, target?: string, pressed: boolean}>} keyDown
+ *   POST /input/key_down - inject only the pressed event; held state becomes observable (GTD-054).
+ * @property {(key: string, opts?: {target?: string, testId?: boolean}) => Promise<{injected: boolean, key: string, target?: string, pressed: boolean}>} keyUp
+ *   POST /input/key_up - inject only the released event (GTD-054).
  *   POST /input/key + one-frame auto-wait; opts.target focuses a Control first.
  * @property {(path: string, opts?: {tweenMode?: "kill"|"await"|"none"}) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
  *   POST /scene/load — resolves only when the new scene is ready.
@@ -391,6 +395,22 @@ export async function connect(port, options = {}) {
 		pressKey: (key, opts = {}) =>
 			/** @type {Promise<any>} */ (
 				_interact(base, token, timeoutMs, "/input/key", opts.target ?? null, {
+					...opts,
+					key,
+				})
+			),
+		/** @type {Driver["keyDown"]} */
+		keyDown: (key, opts = {}) =>
+			/** @type {Promise<any>} */ (
+				_interact(base, token, timeoutMs, "/input/key_down", opts.target ?? null, {
+					...opts,
+					key,
+				})
+			),
+		/** @type {Driver["keyUp"]} */
+		keyUp: (key, opts = {}) =>
+			/** @type {Promise<any>} */ (
+				_interact(base, token, timeoutMs, "/input/key_up", opts.target ?? null, {
 					...opts,
 					key,
 				})

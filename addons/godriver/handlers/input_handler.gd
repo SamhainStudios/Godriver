@@ -432,6 +432,64 @@ static func key(tree: SceneTree, args: Dictionary) -> Dictionary:
 	}
 
 
+## POST /input/key_down (GTD-054) — inject ONLY the pressed event so held
+## state (Input.is_action_pressed) is observable across frames. Same key
+## resolution and routing as /input/key.
+static func key_down(tree: SceneTree, args: Dictionary) -> Dictionary:
+	return _key_phase(tree, args, true)
+
+
+## POST /input/key_up (GTD-054) — inject ONLY the released event.
+static func key_up(tree: SceneTree, args: Dictionary) -> Dictionary:
+	return _key_phase(tree, args, false)
+
+
+static func _key_phase(tree: SceneTree, args: Dictionary, pressed: bool) -> Dictionary:
+	var root := tree.root
+	var key_name := str(args.get("key", ""))
+	if key_name.is_empty():
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "MISSING_PARAM", "message": "'key' is required (action name or KEY_* constant)"}},
+		}
+	var resolved := _resolve_key(key_name)
+	if resolved.is_empty():
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "UNKNOWN_KEY", "message": "'%s' is neither an InputMap action nor a KEY_* constant" % key_name}},
+		}
+	var target_path := ""
+	if args.has("path") or args.has("test_id"):
+		var t := resolve_target(root, args)
+		if not t.ok:
+			return {"code": t.code, "body": {"ok": false, "error": t.error}}
+		var node: Node = t.node
+		if not node is Control:
+			return {
+				"code": 400,
+				"body": {"ok": false, "error": {"code": "BAD_TARGET", "message": "node %s is not a Control (type %s)" % [t.path, node.get_class()]}},
+			}
+		target_path = t.path
+		var control := node as Control
+		control.grab_focus()
+		var viewport := control.get_viewport()
+		if viewport == null:
+			return {
+				"code": 500,
+				"body": {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": "no viewport for %s" % t.path}},
+			}
+		viewport.push_input(_make_key(resolved, pressed), true)
+	else:
+		# Global path: parse + flush (headless workaround, godot#73557) so
+		# Input.is_action_pressed updates immediately.
+		Input.parse_input_event(_make_key(resolved, pressed))
+		Input.flush_buffered_events()
+	return {
+		"code": 200,
+		"body": {"ok": true, "data": {"injected": true, "key": key_name, "device": resolved["device"], "target": target_path, "pressed": pressed}},
+	}
+
+
 ## Resolution result: {keycode, physical_keycode, unicode, device} or {} when
 ## unresolvable. Device per SPEC §6 (4.7+ keyboard = 16; GTD-022 adds the
 ## compat shim for 4.3–4.6).

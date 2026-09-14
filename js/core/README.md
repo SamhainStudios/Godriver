@@ -107,3 +107,16 @@ await driver.resize(state.size.width, state.size.height); // restore
 `resize()` posts `/window/resize` and waits one frame (same auto-wait as
 click/type). See `docs/guides/visual-regression.md` for the per-resolution
 baseline recipe.
+
+## Held-key testing (GTD-054)
+
+```js
+await driver.keyDown("move_right");
+// ... assert held state across frames (Input.is_action_pressed is true) ...
+await driver.keyUp("move_right");
+```
+
+`keyDown`/`keyUp` inject only the pressed/released event (same key resolution
+as `pressKey`: InputMap action first, then `KEY_*` constants). A `keyDown`
+without a matching `keyUp` leaves the action held; `/reset` does not release
+held keys.

@@ -144,6 +144,15 @@ Injects an `InputMap` action (e.g. `"ui_accept"`) or key constant (e.g. `"KEY_ES
 }
 ```
 
+### `POST /input/key_down` / `POST /input/key_up` (GTD-054)
+Split press and release so held key state is observable across frames. Same key resolution, targeting, and error codes as `/input/key`.
+
+**Request Body:** same as `/input/key`.
+
+**Response:** `{ "injected": true, "key": "move_right", "device": 16, "target": "", "pressed": true }`
+
+A `key_down` without a matching `key_up` leaves the action held; `/reset` does NOT release held keys — pair the calls.
+
 ### `GET /input/map`
 Returns all actions configured in the project's `InputMap` and their mapped events.
 

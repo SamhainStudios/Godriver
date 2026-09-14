@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 19)
+Version: 0.1 (draft, rev 20)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -366,6 +366,22 @@ Inject a key press+release. The `key` parameter resolves in order:
 curl -X POST http://127.0.0.1:9090/input/key \
   -H "Content-Type: application/json" \
   -d '{"key": "ui_accept"}'
+```
+
+#### `POST /input/key_down` + `POST /input/key_up` (GTD-054)
+
+Split press and release so held key state is observable across frames. Key resolution, targeting, and error codes are identical to `/input/key`.
+
+- Body: `{"key": "<action name or KEY_* constant>", "path"?|`"test_id"`?}` (same as `/input/key`)
+- `key_down` injects ONLY the pressed event; `key_up` ONLY the released event. Global form flushes so `Input.is_action_pressed` updates immediately and stays true across frames until `key_up`.
+- Response: `{"ok": true, "data": {"injected": true, "key": "...", "device": 16, "target": "", "pressed": true|false}}`
+- Invariant: a `key_down` without a matching `key_up` leaves the action held; `/reset` does NOT release held keys — clients must pair the calls.
+- Use case: hold mechanics (movement holds, charge attacks) — `key_down` → assert `is_action_pressed` across frames → `key_up`.
+
+```bash
+curl -X POST http://127.0.0.1:9090/input/key_down \
+  -H "Content-Type: application/json" \
+  -d '{"key": "move_right"}'
 ```
 
 `/input/drag`, `/input/gamepad`: **documented with their implementing briefs (Phase 2).** Contract prerequisites already frozen: §6 timing/routing, §4 shapes, Appendix A codes.
@@ -809,4 +825,5 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 17)** — State mutation and schema discovery implemented (GTD-033): §5.8 filled (`GET /state`, `GET/POST /state/schema`, `POST /state/set`). Supports target expansion (nodes & Resources) and SPEC §8 coercion rules + null-write type enforcement.
 - **0.1 (draft, rev 18)** — Determinism endpoints implemented (GTD-034): §5.9 filled (`POST /dev/seed`, `POST /dev/time_scale`, `POST /dev/pause`, `POST /dev/save/load`). Global RNG seeding, Engine time_scale, SceneTree pause toggle, save file slot verification.
 - **0.1 (draft, rev 19)** — Window resize endpoints added (GTD-053): §5.10a (`POST /window/resize`, `GET /window/state`). Runtime root-Window resizing + content-scale overrides for responsive testing; works headless; `400 TYPE_MISMATCH` validation with `details.expected`.
+- **0.1 (draft, rev 20)** - Key down/up split endpoints added (GTD-054): §5.3 (`POST /input/key_down`, `POST /input/key_up`). Held key state observable across frames (Input.is_action_pressed); same key resolution/targeting/errors as /input/key; /reset does NOT release held keys.
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

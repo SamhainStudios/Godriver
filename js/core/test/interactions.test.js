@@ -93,6 +93,27 @@ test("type() sends text; pressKey() sends key + optional target", async () => {
 	}
 });
 
+test("keyDown()/keyUp() post to the split endpoints with one-frame wait", async () => {
+	globalThis.fetch = mockFetch([
+		{ match: "/input/key_down", reply: () => ({ ok: true, data: { injected: true, pressed: true } }) },
+		{ match: "/input/key_up", reply: () => ({ ok: true, data: { injected: true, pressed: false } }) },
+		{ match: "/wait/frames", reply: () => ({ ok: true, data: { waited: 1 } }) },
+		{ match: "/health", reply: () => ({ ok: true, data: { status: "ok" } }) },
+	]);
+	try {
+		const driver = await connect(9090, { host: "mock" });
+		await driver.keyDown("move_right");
+		assert.deepEqual(globalThis.fetch.calls.map((c) => c.path), ["/health", "/input/key_down", "/wait/frames?frames=1"]);
+		assert.deepEqual(JSON.parse(globalThis.fetch.calls[1].init.body), { key: "move_right" });
+		await driver.keyUp("move_right");
+		assert.equal(globalThis.fetch.calls[3].path, "/input/key_up");
+		assert.deepEqual(JSON.parse(globalThis.fetch.calls[3].init.body), { key: "move_right" });
+		driver.close();
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
 test("loadScene() posts path, no auto-wait; layout() builds URL", async () => {
 	globalThis.fetch = mockFetch([
 		{
