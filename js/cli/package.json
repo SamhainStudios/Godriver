@@ -22,8 +22,8 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@godriver/core": "^0.1.0",
-    "@godriver/cucumber": "^0.1.0"
+    "@godriver/core": "0.2.0",
+    "@godriver/cucumber": "0.1.0"
   },
   "license": "MIT",
   "repository": {
