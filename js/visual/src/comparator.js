@@ -3,10 +3,10 @@
  *
  * Compares two PNG buffers with pixelmatch, supporting region-of-interest
  * restriction and exclusion masks (rects or test_id-resolved rects).
- * Pure functions, no I/O beyond PNG decode/encode.
+ * Pure functions; PNG decode/encode goes through sharp (GTD-057 removed
+ * the unmaintained pngjs dependency).
  */
 import pixelmatch from "pixelmatch";
-import { PNG } from "pngjs";
 import sharp from "sharp";
 
 /** Error thrown when the two images have different dimensions. */
@@ -36,6 +36,13 @@ export class InvalidImageError extends Error {
 }
 
 /**
+ * @typedef {Object} RawImage decoded RGBA pixels
+ * @property {Buffer} data RGBA, width*height*4
+ * @property {number} width
+ * @property {number} height
+ */
+
+/**
  * @typedef {Object} Rect
  * @property {number} x
  * @property {number} y
@@ -63,23 +70,27 @@ export class InvalidImageError extends Error {
  */
 
 /**
- * Decode a PNG buffer into a PNG instance + raw RGBA.
+ * Decode a PNG buffer into raw RGBA via sharp.
  * @param {Buffer} png
  * @param {string} which label for error messages
- * @returns {Promise<PNG>}
+ * @returns {Promise<RawImage>}
  */
 async function decode(png, which) {
 	try {
-		return PNG.sync.read(png);
+		const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+		return { data: Buffer.from(data), width: info.width, height: info.height };
 	} catch {
-		// pngjs can be strict; fall back to sharp re-encode for odd PNGs.
-		try {
-			const reencoded = await sharp(png).png().toBuffer();
-			return PNG.sync.read(reencoded);
-		} catch {
-			throw new InvalidImageError(which);
-		}
+		throw new InvalidImageError(which);
 	}
+}
+
+/**
+ * Encode raw RGBA back to PNG.
+ * @param {RawImage} img
+ * @returns {Promise<Buffer>}
+ */
+async function encodePng(img) {
+	return sharp(img.data, { raw: { width: img.width, height: img.height, channels: 4 } }).png().toBuffer();
 }
 
 /** @param {Rect} r @param {number} w @param {number} h @returns {Rect} clamped to image bounds */
@@ -96,7 +107,7 @@ function clampRect(r, w, h) {
 
 /**
  * Zero the RGBA of all pixels inside rect (in place).
- * @param {PNG} img
+ * @param {RawImage} img
  * @param {Rect} rect
  */
 function zeroRect(img, rect) {
@@ -109,6 +120,21 @@ function zeroRect(img, rect) {
 			img.data[idx + 3] = 255;
 		}
 	}
+}
+
+/**
+ * Crop a raw image to a rect, returning a new raw image.
+ * @param {RawImage} img
+ * @param {Rect} rect
+ * @returns {RawImage}
+ */
+function cropRaw(img, rect) {
+	const out = Buffer.alloc(rect.w * rect.h * 4);
+	for (let y = 0; y < rect.h; y++) {
+		const srcStart = ((y + rect.y) * img.width + rect.x) * 4;
+		img.data.copy(out, y * rect.w * 4, srcStart, srcStart + rect.w * 4);
+	}
+	return { data: out, width: rect.w, height: rect.h };
 }
 
 /**
@@ -130,9 +156,10 @@ export async function compare(actualPng, baselinePng, options = {}) {
 		if (options.allowResize) {
 			const resized = await sharp(baselinePng)
 				.resize(actual.width, actual.height)
-				.png()
+				.ensureAlpha()
+				.raw()
 				.toBuffer();
-			baseline = await decode(resized, "baseline");
+			baseline = { data: Buffer.from(resized), width: actual.width, height: actual.height };
 		} else {
 			throw new SizeMismatchError(
 				{ width: actual.width, height: actual.height },
@@ -152,21 +179,25 @@ export async function compare(actualPng, baselinePng, options = {}) {
 	// ROI: crop both images to the region before diffing.
 	if (options.roi) {
 		const r = clampRect(options.roi, actual.width, actual.height);
-		actual = cropPng(actual, r);
-		baseline = cropPng(baseline, r);
+		actual = cropRaw(actual, r);
+		baseline = cropRaw(baseline, r);
 	}
 
-	const diff = new PNG({ width: actual.width, height: actual.height });
+	const diffData = Buffer.alloc(actual.width * actual.height * 4);
 	const diffPixels = pixelmatch(
 		actual.data,
 		baseline.data,
-		diff.data,
+		diffData,
 		actual.width,
 		actual.height,
 		{ threshold, includeAA },
 	);
 	const totalPixels = actual.width * actual.height;
-	const diffPng = PNG.sync.write(diff);
+	const diffPng = await sharp(diffData, {
+		raw: { width: actual.width, height: actual.height, channels: 4 },
+	})
+		.png()
+		.toBuffer();
 
 	return {
 		match: diffPixels === 0,
@@ -176,22 +207,6 @@ export async function compare(actualPng, baselinePng, options = {}) {
 		diffPng,
 		size: { width: actual.width, height: actual.height },
 	};
-}
-
-/**
- * Crop a PNG instance to a rect, returning a new PNG.
- * @param {PNG} img
- * @param {Rect} rect
- * @returns {PNG}
- */
-function cropPng(img, rect) {
-	const out = new PNG({ width: rect.w, height: rect.h });
-	for (let y = 0; y < rect.h; y++) {
-		const srcStart = ((y + rect.y) * img.width + rect.x) * 4;
-		const dstStart = y * rect.w * 4;
-		Buffer.from(img.data.buffer, srcStart, rect.w * 4).copy(out.data, dstStart);
-	}
-	return out;
 }
 
 /**
