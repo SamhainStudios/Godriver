@@ -31,7 +31,13 @@ test("click() posts /input/click then waits one frame", async () => {
 	globalThis.fetch = mockFetch([
 		{ match: "/input/click", reply: () => ({ ok: true, data: { injected: true } }) },
 		{ match: "/wait/frames", reply: () => ({ ok: true, data: { waited: 1 } }) },
-		{ match: "/health", reply: () => ({ ok: true, data: { status: "ok", godot_version: "4.7.2", spec_version: "0.1" } }) },
+		{
+			match: "/health",
+			reply: () => ({
+				ok: true,
+				data: { status: "ok", godot_version: "4.7.2", spec_version: "0.1" },
+			}),
+		},
 	]);
 	try {
 		const driver = await connect(9090, { host: "mock" });
@@ -72,9 +78,15 @@ test("type() sends text; pressKey() sends key + optional target", async () => {
 	try {
 		const driver = await connect(9090, { host: "mock" });
 		await driver.type("/root/Edit", "hello");
-		assert.deepEqual(JSON.parse(globalThis.fetch.calls[1].init.body), { path: "/root/Edit", text: "hello" });
+		assert.deepEqual(JSON.parse(globalThis.fetch.calls[1].init.body), {
+			path: "/root/Edit",
+			text: "hello",
+		});
 		await driver.pressKey("ui_accept", { target: "/root/Btn" });
-		assert.deepEqual(JSON.parse(globalThis.fetch.calls[3].init.body), { path: "/root/Btn", key: "ui_accept" });
+		assert.deepEqual(JSON.parse(globalThis.fetch.calls[3].init.body), {
+			path: "/root/Btn",
+			key: "ui_accept",
+		});
 		driver.close();
 	} finally {
 		globalThis.fetch = originalFetch;
@@ -83,7 +95,10 @@ test("type() sends text; pressKey() sends key + optional target", async () => {
 
 test("loadScene() posts path, no auto-wait; layout() builds URL", async () => {
 	globalThis.fetch = mockFetch([
-		{ match: "/scene/load", reply: () => ({ ok: true, data: { loaded: "x", scene_ready: true } }) },
+		{
+			match: "/scene/load",
+			reply: () => ({ ok: true, data: { loaded: "x", scene_ready: true } }),
+		},
 		{ match: "/ui/layout", reply: () => ({ ok: true, data: { type: "Button" } }) },
 		{ match: "/health", reply: () => ({ ok: true, data: { status: "ok" } }) },
 	]);
@@ -105,14 +120,24 @@ test("loadScene() posts path, no auto-wait; layout() builds URL", async () => {
 test("resize() posts /window/resize + one-frame wait; windowState() GETs", async () => {
 	globalThis.fetch = mockFetch([
 		{ match: "/window/resize", reply: () => ({ ok: true, data: { width: 800, height: 600 } }) },
-		{ match: "/window/state", reply: () => ({ ok: true, data: { size: { width: 800, height: 600 } } }) },
+		{
+			match: "/window/state",
+			reply: () => ({ ok: true, data: { size: { width: 800, height: 600 } } }),
+		},
 		{ match: "/wait/frames", reply: () => ({ ok: true, data: { waited: 1 } }) },
 		{ match: "/health", reply: () => ({ ok: true, data: { status: "ok" } }) },
 	]);
 	try {
 		const driver = await connect(9090, { host: "mock" });
-		await driver.resize(800, 600, { stretchMode: "canvas_items", aspect: "keep_width", scale: 2 });
-		assert.deepEqual(globalThis.fetch.calls.map((c) => c.path), ["/health", "/window/resize", "/wait/frames?frames=1"]);
+		await driver.resize(800, 600, {
+			stretchMode: "canvas_items",
+			aspect: "keep_width",
+			scale: 2,
+		});
+		assert.deepEqual(
+			globalThis.fetch.calls.map((c) => c.path),
+			["/health", "/window/resize", "/wait/frames?frames=1"],
+		);
 		assert.deepEqual(JSON.parse(globalThis.fetch.calls[1].init.body), {
 			width: 800,
 			height: 600,
@@ -145,22 +170,28 @@ test("live: click round-trip changes the fixture label", { skip: !liveAvailable(
 	}
 });
 
-test("live: type into LineEdit + pressKey + loadScene + layout", { skip: !liveAvailable() }, async (t) => {
-	const game = await startLiveGame();
-	t.after(() => game.kill());
-	const driver = await connect(LIVE_PORT);
-	try {
-		// layout read (no wait).
-		const lay = await driver.layout("/root/Main/Button");
-		assert.equal(lay.type, "Button");
-		// loadScene resolves only when ready.
-		const loaded = await driver.loadScene("res://scratch/spike/test/fixtures/alt_scene.tscn");
-		assert.equal(loaded.scene_ready, true);
-		const cur = await driver.request("/scene/current");
-		assert.equal(cur.scene, "res://scratch/spike/test/fixtures/alt_scene.tscn");
-		// restore main scene for the click test's fixture.
-		await driver.loadScene("res://scratch/spike/scenes/main.tscn");
-	} finally {
-		driver.close();
-	}
-});
+test(
+	"live: type into LineEdit + pressKey + loadScene + layout",
+	{ skip: !liveAvailable() },
+	async (t) => {
+		const game = await startLiveGame();
+		t.after(() => game.kill());
+		const driver = await connect(LIVE_PORT);
+		try {
+			// layout read (no wait).
+			const lay = await driver.layout("/root/Main/Button");
+			assert.equal(lay.type, "Button");
+			// loadScene resolves only when ready.
+			const loaded = await driver.loadScene(
+				"res://scratch/spike/test/fixtures/alt_scene.tscn",
+			);
+			assert.equal(loaded.scene_ready, true);
+			const cur = await driver.request("/scene/current");
+			assert.equal(cur.scene, "res://scratch/spike/test/fixtures/alt_scene.tscn");
+			// restore main scene for the click test's fixture.
+			await driver.loadScene("res://scratch/spike/scenes/main.tscn");
+		} finally {
+			driver.close();
+		}
+	},
+);

@@ -25,24 +25,35 @@ export async function startLiveGame() {
 	if (!liveAvailable()) {
 		throw new Error("GODOT_BIN not set — live tests skipped");
 	}
-	const proc = spawn(GODOT_BIN, [
-		"--headless", "--path", process.cwd(),
-		"--", "--test-driver", `--test-driver-port=${LIVE_PORT}`,
-	], { stdio: ["ignore", "pipe", "pipe"] });
+	const proc = spawn(
+		GODOT_BIN,
+		[
+			"--headless",
+			"--path",
+			process.cwd(),
+			"--",
+			"--test-driver",
+			`--test-driver-port=${LIVE_PORT}`,
+		],
+		{ stdio: ["ignore", "pipe", "pipe"] },
+	);
 	proc.stdout.on("data", () => {});
 	proc.stderr.on("data", () => {});
 	const deadline = Date.now() + 10000;
 	while (Date.now() < deadline) {
 		try {
-			const res = await fetch(`http://127.0.0.1:${LIVE_PORT}/health`, { signal: AbortSignal.timeout(1000) });
+			const res = await fetch(`http://127.0.0.1:${LIVE_PORT}/health`, {
+				signal: AbortSignal.timeout(1000),
+			});
 			if (res.ok) {
 				return {
 					proc,
-					kill: () => new Promise((resolve) => {
-						proc.once("exit", () => resolve());
-						proc.kill();
-						setTimeout(resolve, 2000).unref?.();
-					}),
+					kill: () =>
+						new Promise((resolve) => {
+							proc.once("exit", () => resolve());
+							proc.kill();
+							setTimeout(resolve, 2000).unref?.();
+						}),
 				};
 			}
 		} catch {

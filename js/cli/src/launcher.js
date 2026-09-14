@@ -26,7 +26,12 @@ export class GodotLauncher {
 	 * Launch the Godot process.
 	 */
 	async start() {
-		const args = ["--path", this.projectPath, "--test-driver", `--test-driver-port=${this.port}`];
+		const args = [
+			"--path",
+			this.projectPath,
+			"--test-driver",
+			`--test-driver-port=${this.port}`,
+		];
 		if (this.headless) {
 			args.unshift("--headless");
 		}
@@ -63,26 +68,32 @@ export class GodotLauncher {
 		const startTime = Date.now();
 		while (Date.now() - startTime < timeoutMs) {
 			if (this.process && this.process.exitCode !== null) {
-				throw new Error(`Godot process exited prematurely with code ${this.process.exitCode}`);
+				throw new Error(
+					`Godot process exited prematurely with code ${this.process.exitCode}`,
+				);
 			}
 			try {
 				const isHealthy = await new Promise((resolve) => {
-					const req = http.get(`http://127.0.0.1:${this.port}/health`, { timeout: 1000 }, (res) => {
-						if (res.statusCode === 200) {
-							let body = "";
-							res.on("data", (c) => (body += c));
-							res.on("end", () => {
-								try {
-									const json = JSON.parse(body);
-									resolve(json?.data?.status === "ok");
-								} catch {
-									resolve(false);
-								}
-							});
-						} else {
-							resolve(false);
-						}
-					});
+					const req = http.get(
+						`http://127.0.0.1:${this.port}/health`,
+						{ timeout: 1000 },
+						(res) => {
+							if (res.statusCode === 200) {
+								let body = "";
+								res.on("data", (c) => (body += c));
+								res.on("end", () => {
+									try {
+										const json = JSON.parse(body);
+										resolve(json?.data?.status === "ok");
+									} catch {
+										resolve(false);
+									}
+								});
+							} else {
+								resolve(false);
+							}
+						},
+					);
 					req.on("error", () => resolve(false));
 					req.on("timeout", () => {
 						req.destroy();

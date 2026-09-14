@@ -1,9 +1,4 @@
-export {
-	compare,
-	solidPng,
-	SizeMismatchError,
-	InvalidImageError,
-} from "./comparator.js";
+export { compare, solidPng, SizeMismatchError, InvalidImageError } from "./comparator.js";
 export {
 	BaselineStore,
 	assertMatchesBaseline,

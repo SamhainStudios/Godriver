@@ -11,7 +11,10 @@ const p2: Promise<Driver> = connect(9091, { token: "s3cret", timeoutMs: 2000, ma
 // Driver surface
 async function use(d: Driver): Promise<void> {
 	const data: unknown = await d.request("/node/root/Main");
-	const data2: unknown = await d.request("/reset", { method: "POST", body: { tween_mode: "kill" } });
+	const data2: unknown = await d.request("/reset", {
+		method: "POST",
+		body: { tween_mode: "kill" },
+	});
 	const h: { status: string; godot_version: string; spec_version: string } = await d.health();
 
 	// Inputs & Scene

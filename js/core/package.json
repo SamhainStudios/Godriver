@@ -1,36 +1,36 @@
 {
-  "name": "@godriver/core",
-  "version": "0.2.0",
-  "description": "Portable HTTP client for the Godot Test Driver addon (SPEC v0.1). Zero runner dependencies.",
-  "type": "module",
-  "main": "src/client.js",
-  "exports": {
-    ".": "./src/client.js"
-  },
-  "engines": {
-    "node": ">=24"
-  },
-  "files": [
-    "src",
-    "README.md",
-    "LICENSE"
-  ],
-  "dependencies": {},
-  "keywords": [
-    "godot",
-    "testing",
-    "e2e",
-    "bdd"
-  ],
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SamhainStudios/godriver.git",
-    "directory": "js/core"
-  },
-  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/core#readme",
-  "bugs": "https://github.com/SamhainStudios/godriver/issues",
-  "publishConfig": {
-    "access": "public"
-  }
+	"name": "@godriver/core",
+	"version": "0.2.0",
+	"description": "Portable HTTP client for the Godot Test Driver addon (SPEC v0.1). Zero runner dependencies.",
+	"type": "module",
+	"main": "src/client.js",
+	"exports": {
+		".": "./src/client.js"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"files": [
+		"src",
+		"README.md",
+		"LICENSE"
+	],
+	"dependencies": {},
+	"keywords": [
+		"godot",
+		"testing",
+		"e2e",
+		"bdd"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/SamhainStudios/godriver.git",
+		"directory": "js/core"
+	},
+	"homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/core#readme",
+	"bugs": "https://github.com/SamhainStudios/godriver/issues",
+	"publishConfig": {
+		"access": "public"
+	}
 }

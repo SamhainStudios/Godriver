@@ -25,8 +25,12 @@ function mockFetch(routes) {
 			headers: {
 				get: (name) => {
 					const ln = name.toLowerCase();
-					if (r.headers && r.headers[ln]) {return r.headers[ln];}
-					if (ln === "content-type") {return r.contentType ?? "application/json";}
+					if (r.headers && r.headers[ln]) {
+						return r.headers[ln];
+					}
+					if (ln === "content-type") {
+						return r.contentType ?? "application/json";
+					}
 					return null;
 				},
 			},
@@ -40,7 +44,10 @@ function mockFetch(routes) {
 
 const HEALTH_OK = {
 	status: 200,
-	body: JSON.stringify({ ok: true, data: { status: "ok", godot_version: "4.7.2", spec_version: "0.1" } }),
+	body: JSON.stringify({
+		ok: true,
+		data: { status: "ok", godot_version: "4.7.2", spec_version: "0.1" },
+	}),
 };
 
 test("connect resolves and health returns data", async () => {
@@ -63,14 +70,25 @@ test("envelope error maps to typed DriverError with code/message/details", async
 		"/health": HEALTH_OK,
 		"/node/root/Nope": {
 			status: 404,
-			body: JSON.stringify({ ok: false, error: { code: "NODE_NOT_FOUND", message: "no node at path /root/Nope", details: null } }),
+			body: JSON.stringify({
+				ok: false,
+				error: {
+					code: "NODE_NOT_FOUND",
+					message: "no node at path /root/Nope",
+					details: null,
+				},
+			}),
 		},
 	});
 	try {
 		const driver = await connect(9090);
 		await assert.rejects(
 			driver.request("/node/root/Nope"),
-			(e) => e instanceof DriverError && e.code === "NODE_NOT_FOUND" && e.status === 404 && e.message.includes("/root/Nope"),
+			(e) =>
+				e instanceof DriverError &&
+				e.code === "NODE_NOT_FOUND" &&
+				e.status === 404 &&
+				e.message.includes("/root/Nope"),
 		);
 	} finally {
 		m.mock.restore();
@@ -82,14 +100,24 @@ test("details survive the mapping", async () => {
 		"/health": HEALTH_OK,
 		"/node": {
 			status: 409,
-			body: JSON.stringify({ ok: false, error: { code: "AMBIGUOUS_TEST_ID", message: "2 matches", details: { matches: ["/root/A", "/root/B"] } } }),
+			body: JSON.stringify({
+				ok: false,
+				error: {
+					code: "AMBIGUOUS_TEST_ID",
+					message: "2 matches",
+					details: { matches: ["/root/A", "/root/B"] },
+				},
+			}),
 		},
 	});
 	try {
 		const driver = await connect(9090);
 		await assert.rejects(
 			driver.request("/node?test_id=dup"),
-			(e) => e instanceof DriverError && e.code === "AMBIGUOUS_TEST_ID" && e.details.matches.length === 2,
+			(e) =>
+				e instanceof DriverError &&
+				e.code === "AMBIGUOUS_TEST_ID" &&
+				e.details.matches.length === 2,
 		);
 	} finally {
 		m.mock.restore();
@@ -117,7 +145,10 @@ test("timeout → ConnectionError", async () => {
 	});
 	try {
 		const driver = await connect(9090);
-		await assert.rejects(driver.request("/wait/long"), (e) => e instanceof ConnectionError && e.message.includes("timed out"));
+		await assert.rejects(
+			driver.request("/wait/long"),
+			(e) => e instanceof ConnectionError && e.message.includes("timed out"),
+		);
 	} finally {
 		m.mock.restore();
 	}
@@ -130,7 +161,10 @@ test("malformed envelope → DriverError INTERNAL_ERROR", async () => {
 	});
 	try {
 		const driver = await connect(9090);
-		await assert.rejects(driver.request("/broken"), (e) => e instanceof DriverError && e.code === "INTERNAL_ERROR");
+		await assert.rejects(
+			driver.request("/broken"),
+			(e) => e instanceof DriverError && e.code === "INTERNAL_ERROR",
+		);
 	} finally {
 		m.mock.restore();
 	}
@@ -166,9 +200,18 @@ test("POST body serialized as JSON with content-type", async () => {
 test("signal methods send correct request bodies", async () => {
 	const { m, calls } = mockFetch({
 		"/health": HEALTH_OK,
-		"/signal/watch": { status: 200, body: JSON.stringify({ ok: true, data: { watched: true } }) },
-		"/signal/poll": { status: 200, body: JSON.stringify({ ok: true, data: { emissions: [] } }) },
-		"/signal/wait": { status: 200, body: JSON.stringify({ ok: true, data: { signaled: true } }) },
+		"/signal/watch": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { watched: true } }),
+		},
+		"/signal/poll": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { emissions: [] } }),
+		},
+		"/signal/wait": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { signaled: true } }),
+		},
 	});
 	try {
 		const driver = await connect(9090);
@@ -188,17 +231,26 @@ test("assertVisible polls until passed true", async () => {
 	let attempt = 0;
 	const m = mock.method(globalThis, "fetch", async (url, _init) => {
 		const path = new URL(url).pathname;
-		if (path === "/health") {return { status: 200, text: async () => HEALTH_OK.body };}
+		if (path === "/health") {
+			return { status: 200, text: async () => HEALTH_OK.body };
+		}
 		attempt++;
 		const passed = attempt >= 2;
 		return {
 			status: 200,
-			text: async () => JSON.stringify({ ok: true, data: { target: "/root/Main", actual: passed, expected: true, passed } }),
+			text: async () =>
+				JSON.stringify({
+					ok: true,
+					data: { target: "/root/Main", actual: passed, expected: true, passed },
+				}),
 		};
 	});
 	try {
 		const driver = await connect(9090);
-		const res = await driver.assertVisible("/root/Main", { timeoutMs: 1000, pollIntervalMs: 10 });
+		const res = await driver.assertVisible("/root/Main", {
+			timeoutMs: 1000,
+			pollIntervalMs: 10,
+		});
 		assert.equal(res.passed, true);
 		assert.equal(attempt, 2);
 	} finally {
@@ -209,17 +261,26 @@ test("assertVisible polls until passed true", async () => {
 test("assertVisible throws DriverError ASSERTION_FAILED on timeout", async () => {
 	const m = mock.method(globalThis, "fetch", async (url) => {
 		const path = new URL(url).pathname;
-		if (path === "/health") {return { status: 200, text: async () => HEALTH_OK.body };}
+		if (path === "/health") {
+			return { status: 200, text: async () => HEALTH_OK.body };
+		}
 		return {
 			status: 200,
-			text: async () => JSON.stringify({ ok: true, data: { target: "/root/Main", actual: false, expected: true, passed: false } }),
+			text: async () =>
+				JSON.stringify({
+					ok: true,
+					data: { target: "/root/Main", actual: false, expected: true, passed: false },
+				}),
 		};
 	});
 	try {
 		const driver = await connect(9090);
 		await assert.rejects(
 			driver.assertVisible("/root/Main", { timeoutMs: 50, pollIntervalMs: 10 }),
-			(e) => e instanceof DriverError && e.code === "ASSERTION_FAILED" && e.message.includes("/root/Main"),
+			(e) =>
+				e instanceof DriverError &&
+				e.code === "ASSERTION_FAILED" &&
+				e.message.includes("/root/Main"),
 		);
 	} finally {
 		m.mock.restore();
@@ -229,13 +290,28 @@ test("assertVisible throws DriverError ASSERTION_FAILED on timeout", async () =>
 test("state and dev methods send correct bodies", async () => {
 	const { m, calls } = mockFetch({
 		"/health": HEALTH_OK,
-		"/state": { status: 200, body: JSON.stringify({ ok: true, data: { values: { hp: 100 } } }) },
-		"/state/schema": { status: 200, body: JSON.stringify({ ok: true, data: { properties: [] } }) },
-		"/state/set": { status: 200, body: JSON.stringify({ ok: true, data: { updated: ["hp"] } }) },
+		"/state": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { values: { hp: 100 } } }),
+		},
+		"/state/schema": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { properties: [] } }),
+		},
+		"/state/set": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { updated: ["hp"] } }),
+		},
 		"/dev/seed": { status: 200, body: JSON.stringify({ ok: true, data: { seeded: true } }) },
-		"/dev/time_scale": { status: 200, body: JSON.stringify({ ok: true, data: { time_scale: 2.0 } }) },
+		"/dev/time_scale": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { time_scale: 2.0 } }),
+		},
 		"/dev/pause": { status: 200, body: JSON.stringify({ ok: true, data: { paused: true } }) },
-		"/dev/save/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: true } }) },
+		"/dev/save/load": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { loaded: true } }),
+		},
 	});
 	try {
 		const driver = await connect(9090);
@@ -261,9 +337,18 @@ test("state and dev methods send correct bodies", async () => {
 test("test_id: prefix syntax and loadScene path normalization", async () => {
 	const { m, calls } = mockFetch({
 		"/health": HEALTH_OK,
-		"/input/click": { status: 200, body: JSON.stringify({ ok: true, data: { injected: true } }) },
+		"/input/click": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { injected: true } }),
+		},
 		"/wait/frames": { status: 200, body: JSON.stringify({ ok: true, data: { frames: 1 } }) },
-		"/scene/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: "res://scenes/main.tscn", scene_ready: true } }) },
+		"/scene/load": {
+			status: 200,
+			body: JSON.stringify({
+				ok: true,
+				data: { loaded: "res://scenes/main.tscn", scene_ready: true },
+			}),
+		},
 	});
 	try {
 		const driver = await connect(9090);
@@ -282,10 +367,37 @@ test("test_id: prefix syntax and loadScene path normalization", async () => {
 test("reset, loadScene with tweenMode, assertText, and waitTween", async () => {
 	const { m, calls } = mockFetch({
 		"/health": HEALTH_OK,
-		"/reset": { status: 200, body: JSON.stringify({ ok: true, data: { reloaded_scene: "res://Main.tscn", scene_ready: true } }) },
-		"/scene/load": { status: 200, body: JSON.stringify({ ok: true, data: { loaded: "res://Level.tscn", scene_ready: true } }) },
-		"/assert/property": { status: 200, body: JSON.stringify({ ok: true, data: { target: "/root/Label", property: "text", actual: "Score: 10", expected: "Score: 10", passed: true } }) },
-		"/wait/tween": { status: 200, body: JSON.stringify({ ok: true, data: { tweens_remaining: 0 } }) },
+		"/reset": {
+			status: 200,
+			body: JSON.stringify({
+				ok: true,
+				data: { reloaded_scene: "res://Main.tscn", scene_ready: true },
+			}),
+		},
+		"/scene/load": {
+			status: 200,
+			body: JSON.stringify({
+				ok: true,
+				data: { loaded: "res://Level.tscn", scene_ready: true },
+			}),
+		},
+		"/assert/property": {
+			status: 200,
+			body: JSON.stringify({
+				ok: true,
+				data: {
+					target: "/root/Label",
+					property: "text",
+					actual: "Score: 10",
+					expected: "Score: 10",
+					passed: true,
+				},
+			}),
+		},
+		"/wait/tween": {
+			status: 200,
+			body: JSON.stringify({ ok: true, data: { tweens_remaining: 0 } }),
+		},
 	});
 	try {
 		const driver = await connect(9090);
@@ -337,7 +449,10 @@ test("screenshot with base64 and binary format", async () => {
 		"/screenshot/capture": {
 			status: 200,
 			contentType: "application/json",
-			body: JSON.stringify({ ok: true, data: { image: "base64str", width: 800, height: 600, format: "png" } }),
+			body: JSON.stringify({
+				ok: true,
+				data: { image: "base64str", width: 800, height: 600, format: "png" },
+			}),
 		},
 	});
 	try {
@@ -357,7 +472,10 @@ test("screenshotRegion with test_id and explicit rect", async () => {
 		"/screenshot/region": {
 			status: 200,
 			contentType: "application/json",
-			body: JSON.stringify({ ok: true, data: { image: "region_base64", width: 100, height: 50, format: "png" } }),
+			body: JSON.stringify({
+				ok: true,
+				data: { image: "region_base64", width: 100, height: 50, format: "png" },
+			}),
 		},
 	});
 	try {
@@ -383,7 +501,10 @@ test("screenshot handles HEADLESS_RENDERING_DISABLED and HDR_NOT_SUPPORTED error
 			contentType: "application/json",
 			body: JSON.stringify({
 				ok: false,
-				error: { code: "HEADLESS_RENDERING_DISABLED", message: "cannot capture screenshot in headless mode" },
+				error: {
+					code: "HEADLESS_RENDERING_DISABLED",
+					message: "cannot capture screenshot in headless mode",
+				},
 			}),
 		},
 	});
@@ -391,7 +512,10 @@ test("screenshot handles HEADLESS_RENDERING_DISABLED and HDR_NOT_SUPPORTED error
 		const driver = await connect(9090);
 		await assert.rejects(
 			driver.screenshot(),
-			(e) => e instanceof DriverError && e.code === "HEADLESS_RENDERING_DISABLED" && e.status === 400,
+			(e) =>
+				e instanceof DriverError &&
+				e.code === "HEADLESS_RENDERING_DISABLED" &&
+				e.status === 400,
 		);
 	} finally {
 		m.mock.restore();
@@ -418,9 +542,3 @@ test("screenshot handles HEADLESS_RENDERING_DISABLED and HDR_NOT_SUPPORTED error
 		m2.mock.restore();
 	}
 });
-
-
-
-
-
-

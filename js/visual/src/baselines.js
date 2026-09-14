@@ -105,7 +105,9 @@ export class BaselineStore {
 		const png = await readFile(this.pngPath(name));
 		let meta = null;
 		try {
-			meta = /** @type {BaselineMeta} */ (JSON.parse(await readFile(this.metaPath(name), "utf8")));
+			meta = /** @type {BaselineMeta} */ (
+				JSON.parse(await readFile(this.metaPath(name), "utf8"))
+			);
 		} catch {
 			// sidecar optional
 		}
@@ -191,7 +193,13 @@ export async function assertMatchesBaseline(store, name, options) {
 
 	if (result.match) {
 		if (process.env.GODRIVER_DIFF_OUTPUT === "1") {
-			await writeArtifacts(store, name, { actualPng, baselinePng, diffPng: result.diffPng, baselineMeta, result });
+			await writeArtifacts(store, name, {
+				actualPng,
+				baselinePng,
+				diffPng: result.diffPng,
+				baselineMeta,
+				result,
+			});
 		}
 		return {
 			match: true,
@@ -201,7 +209,13 @@ export async function assertMatchesBaseline(store, name, options) {
 		};
 	}
 
-	const paths = await writeArtifacts(store, name, { actualPng, baselinePng, diffPng: result.diffPng, baselineMeta, result });
+	const paths = await writeArtifacts(store, name, {
+		actualPng,
+		baselinePng,
+		diffPng: result.diffPng,
+		baselineMeta,
+		result,
+	});
 	throw new BaselineMismatchError(name, paths.report, result);
 }
 

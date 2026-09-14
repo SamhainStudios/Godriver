@@ -6,7 +6,18 @@ export default [
 		ignores: ["node_modules/", "reports/", "scratch/", "dist/", "**/*.min.js"],
 	},
 	{
-		files: ["core/src/**/*.js", "core/test/**/*.js", "cucumber/src/**/*.js", "cucumber/test/**/*.js", "cli/src/**/*.js", "cli/bin/**/*.js", "cli/test/**/*.js", "visual/src/**/*.js", "visual/test/**/*.js", "examples/**/*.js"],
+		files: [
+			"core/src/**/*.js",
+			"core/test/**/*.js",
+			"cucumber/src/**/*.js",
+			"cucumber/test/**/*.js",
+			"cli/src/**/*.js",
+			"cli/bin/**/*.js",
+			"cli/test/**/*.js",
+			"visual/src/**/*.js",
+			"visual/test/**/*.js",
+			"examples/**/*.js",
+		],
 		languageOptions: {
 			ecmaVersion: 2022,
 			sourceType: "module",

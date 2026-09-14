@@ -46,7 +46,10 @@ function esc(value) {
 export function buildReport(input) {
 	const { name, baselinePng, actualPng, diffPng, baselineMeta = {}, result } = input;
 	const metaRows = Object.entries(baselineMeta)
-		.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`)
+		.map(
+			([k, v]) =>
+				`<tr><th>${esc(k)}</th><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`,
+		)
 		.join("\n");
 	const pct = (result.totalPixels > 0 ? result.ratio * 100 : 0).toFixed(4);
 	return `<!doctype html>

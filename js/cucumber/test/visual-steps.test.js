@@ -23,7 +23,12 @@ function captureSteps() {
 
 /** @param {Buffer} png @returns {import("@godriver/visual").AssertOptions["screenshot"]} */
 function captureFn(png) {
-	return async () => ({ buffer: new Uint8Array(png), width: 32, height: 32, contentType: "image/png" });
+	return async () => ({
+		buffer: new Uint8Array(png),
+		width: 32,
+		height: 32,
+		contentType: "image/png",
+	});
 }
 
 /** World mock with a driver whose screenshot returns a fixed PNG. @param {Buffer} png @returns {{initDriver: () => Promise<Object>}} */
@@ -48,7 +53,9 @@ test("baseline step: first run with UPDATE_BASELINE creates baseline, second run
 	process.env.UPDATE_BASELINE = "true";
 	try {
 		const png = await solidPng(32, 32, "#336699");
-		const step = steps.find((s) => s.pattern === "the screen should match baseline {string}").fn;
+		const step = steps.find(
+			(s) => s.pattern === "the screen should match baseline {string}",
+		).fn;
 		await step.call(worldWith(png), "menu");
 		delete process.env.UPDATE_BASELINE;
 		// Same capture now matches.
@@ -71,7 +78,9 @@ test("baseline step: mismatch throws with report path", async () => {
 	try {
 		const baseline = await solidPng(32, 32, "#336699");
 		const actual = await solidPng(32, 32, "#ff0000");
-		const step = steps.find((s) => s.pattern === "the screen should match baseline {string}").fn;
+		const step = steps.find(
+			(s) => s.pattern === "the screen should match baseline {string}",
+		).fn;
 		process.env.UPDATE_BASELINE = "true";
 		await step.call(worldWith(baseline), "diffy");
 		delete process.env.UPDATE_BASELINE;
@@ -100,7 +109,9 @@ test("baseline step: test_id variant routes through screenshotRegion with testId
 				return captureFn(png)({});
 			},
 		};
-		const step = steps.find((s) => s.pattern === "the screen should match baseline {string} at test_id {string}").fn;
+		const step = steps.find(
+			(s) => s.pattern === "the screen should match baseline {string} at test_id {string}",
+		).fn;
 		await step.call({ initDriver: async () => driver }, "hud", "hud_root");
 		assert.equal(calls.length, 1);
 		assert.equal(calls[0].target, "hud_root");

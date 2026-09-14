@@ -54,13 +54,18 @@ function isInvalid(e: InvalidImageError): boolean {
 }
 
 // GTD-052: baseline workflow surface
-async function baselineFlow(driver: { screenshot: (opts?: { format?: "binary" | "base64" }) => Promise<{ buffer: Uint8Array; width: number; height: number; contentType: string }> }): Promise<void> {
+async function baselineFlow(driver: {
+	screenshot: (opts?: {
+		format?: "binary" | "base64";
+	}) => Promise<{ buffer: Uint8Array; width: number; height: number; contentType: string }>;
+}): Promise<void> {
 	const store = new BaselineStore({ dir: "tests/baselines", artifactsDir: "artifacts/visual" });
 	const pngPath: string = store.pngPath("menu");
 	const metaPath: string = store.metaPath("menu");
 	const artDir: string = store.artifactDir("menu");
 	const exists: Promise<boolean> = store.exists("menu");
-	const read: { png: Buffer; meta: import("../src/baselines.js").BaselineMeta | null } = await store.read("menu");
+	const read: { png: Buffer; meta: import("../src/baselines.js").BaselineMeta | null } =
+		await store.read("menu");
 	await store.write("menu", read.png, { driver: "godot-4.7.2", width: 32, height: 32 });
 
 	const result = await assertMatchesBaseline(store, "menu", {

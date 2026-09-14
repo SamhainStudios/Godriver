@@ -53,10 +53,13 @@ export function registerSteps(cucumberFramework) {
 		await driver.assertEnabled(target, { expected: true });
 	});
 
-	Then("node {string} property {string} should be {string}", async function (target, property, expectedValue) {
-		const driver = await this.initDriver();
-		await driver.assertProperty(target, property, expectedValue);
-	});
+	Then(
+		"node {string} property {string} should be {string}",
+		async function (target, property, expectedValue) {
+			const driver = await this.initDriver();
+			await driver.assertProperty(target, property, expectedValue);
+		},
+	);
 
 	// --- Signals ---
 	When("I watch signal {string} on {string}", async function (signalName, target) {

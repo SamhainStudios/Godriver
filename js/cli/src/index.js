@@ -50,7 +50,9 @@ export async function runCli(argv = process.argv.slice(2)) {
 	});
 
 	try {
-		console.log(`[godriver] Launching Godot (${godotPath}) at path: ${projectPath} on port ${port}...`);
+		console.log(
+			`[godriver] Launching Godot (${godotPath}) at path: ${projectPath} on port ${port}...`,
+		);
 		await launcher.start();
 		console.log(`[godriver] Godot instance ready. Starting watchdog...`);
 		watchdog.start();

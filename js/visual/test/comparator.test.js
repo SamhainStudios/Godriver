@@ -123,4 +123,3 @@ test("invalid PNG throws InvalidImageError", async () => {
 		(err) => err.name === "InvalidImageError",
 	);
 });
-

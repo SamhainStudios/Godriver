@@ -35,7 +35,9 @@ export class Watchdog {
 	}
 
 	async checkHealth() {
-		if (!this.running) {return;}
+		if (!this.running) {
+			return;
+		}
 
 		// Check if launcher process exited
 		if (this.launcher.process && this.launcher.process.exitCode !== null) {
@@ -46,13 +48,17 @@ export class Watchdog {
 		}
 
 		const isHealthy = await new Promise((resolve) => {
-			const req = http.get(`http://127.0.0.1:${this.port}/health`, { timeout: 2000 }, (res) => {
-				if (res.statusCode === 200) {
-					resolve(true);
-				} else {
-					resolve(false);
-				}
-			});
+			const req = http.get(
+				`http://127.0.0.1:${this.port}/health`,
+				{ timeout: 2000 },
+				(res) => {
+					if (res.statusCode === 200) {
+						resolve(true);
+					} else {
+						resolve(false);
+					}
+				},
+			);
 			req.on("error", () => resolve(false));
 			req.on("timeout", () => {
 				req.destroy();

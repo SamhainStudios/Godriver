@@ -34,7 +34,11 @@ export function registerVisualSteps(cucumberFramework) {
 		});
 		/** @type {import("@godriver/visual").AssertOptions["screenshot"]} */
 		const screenshot = region.target
-			? (opts = {}) => driver.screenshotRegion(region.target, { testId: region.testId === true, ...opts })
+			? (opts = {}) =>
+					driver.screenshotRegion(region.target, {
+						testId: region.testId === true,
+						...opts,
+					})
 			: (opts = {}) => driver.screenshot(opts);
 		await assertMatchesBaseline(store, name, { screenshot, driverLabel: "cucumber" });
 	}
@@ -43,11 +47,17 @@ export function registerVisualSteps(cucumberFramework) {
 		await assertBaseline(this, name);
 	});
 
-	Then("the screen should match baseline {string} at node {string}", async function (name, target) {
-		await assertBaseline(this, name, { target });
-	});
+	Then(
+		"the screen should match baseline {string} at node {string}",
+		async function (name, target) {
+			await assertBaseline(this, name, { target });
+		},
+	);
 
-	Then("the screen should match baseline {string} at test_id {string}", async function (name, testId) {
-		await assertBaseline(this, name, { target: testId, testId: true });
-	});
+	Then(
+		"the screen should match baseline {string} at test_id {string}",
+		async function (name, testId) {
+			await assertBaseline(this, name, { target: testId, testId: true });
+		},
+	);
 }

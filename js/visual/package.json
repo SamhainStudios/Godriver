@@ -1,34 +1,34 @@
 {
-  "name": "@godriver/visual",
-  "version": "0.1.0",
-  "description": "Visual regression comparator for Godriver: pixelmatch diffing with ROI and exclusion masks.",
-  "type": "module",
-  "main": "src/index.js",
-  "exports": {
-    ".": "./src/index.js"
-  },
-  "engines": {
-    "node": ">=24"
-  },
-  "files": [
-    "src",
-    "README.md",
-    "LICENSE"
-  ],
-  "dependencies": {
-    "pixelmatch": "7.2.0",
-    "pngjs": "7.0.0",
-    "sharp": "0.34.5"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SamhainStudios/godriver.git",
-    "directory": "js/visual"
-  },
-  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/visual#readme",
-  "bugs": "https://github.com/SamhainStudios/godriver/issues",
-  "publishConfig": {
-    "access": "public"
-  }
+	"name": "@godriver/visual",
+	"version": "0.1.0",
+	"description": "Visual regression comparator for Godriver: pixelmatch diffing with ROI and exclusion masks.",
+	"type": "module",
+	"main": "src/index.js",
+	"exports": {
+		".": "./src/index.js"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"files": [
+		"src",
+		"README.md",
+		"LICENSE"
+	],
+	"dependencies": {
+		"pixelmatch": "7.2.0",
+		"pngjs": "7.0.0",
+		"sharp": "0.34.5"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/SamhainStudios/godriver.git",
+		"directory": "js/visual"
+	},
+	"homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/visual#readme",
+	"bugs": "https://github.com/SamhainStudios/godriver/issues",
+	"publishConfig": {
+		"access": "public"
+	}
 }
