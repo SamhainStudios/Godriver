@@ -4,7 +4,7 @@
 	"description": "Command line interface and fail-fast watchdog runner for Godriver",
 	"type": "module",
 	"bin": {
-		"godriver": "./bin/godriver.js"
+		"godriver": "bin/godriver.js"
 	},
 	"main": "src/index.js",
 	"exports": {
