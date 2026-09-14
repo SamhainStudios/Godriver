@@ -1,45 +1,45 @@
 {
-	"name": "@godriver/cucumber",
-	"version": "0.1.0",
-	"description": "Cucumber BDD world, hooks, and step definitions for Godriver.",
-	"type": "module",
-	"main": "src/index.js",
-	"exports": {
-		".": "./src/index.js",
-		"./world": "./src/world.js",
-		"./hooks": "./src/hooks.js",
-		"./steps": "./src/steps.js",
-		"./steps/visual": "./src/steps/visual.js"
-	},
-	"engines": {
-		"node": ">=24"
-	},
-	"files": [
-		"src",
-		"README.md",
-		"LICENSE"
-	],
-	"dependencies": {
-		"@godriver/core": "0.2.0"
-	},
-	"peerDependencies": {
-		"@cucumber/cucumber": "^10.0.0 || ^11.0.0",
-		"@godriver/visual": "0.1.0"
-	},
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/SamhainStudios/godriver.git",
-		"directory": "js/cucumber"
-	},
-	"homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/cucumber#readme",
-	"bugs": "https://github.com/SamhainStudios/godriver/issues",
-	"publishConfig": {
-		"access": "public"
-	},
-	"peerDependenciesMeta": {
-		"@godriver/visual": {
-			"optional": true
-		}
-	}
+  "name": "@godriver/cucumber",
+  "version": "0.1.0",
+  "description": "Cucumber BDD world, hooks, and step definitions for Godriver.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./world": "./src/world.js",
+    "./hooks": "./src/hooks.js",
+    "./steps": "./src/steps.js",
+    "./steps/visual": "./src/steps/visual.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@godriver/core": "0.3.0"
+  },
+  "peerDependencies": {
+    "@cucumber/cucumber": "^10.0.0 || ^11.0.0",
+    "@godriver/visual": "0.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/cucumber"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/cucumber#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependenciesMeta": {
+    "@godriver/visual": {
+      "optional": true
+    }
+  }
 }
