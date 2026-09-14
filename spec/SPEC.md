@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 20)
+Version: 0.1 (draft, rev 21)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -258,6 +258,22 @@ A single property value, serialized per §4.
 
 ```bash
 curl http://127.0.0.1:9090/node/root/Main/Button/property/text
+```
+
+#### `POST /node/<path>/property/<name>` (GTD-055)
+
+Write a node property. The JSON `value` is decoded per §4 shapes and coerced to the property's declared type from `get_property_list()`. This is the game-state seeding primitive (arrange-phase setup): teleport the player, set counters, update labels — the web-QA "testing API endpoint" equivalent.
+
+- Body: `{"value": <§4 value>}`; untyped (Variant) properties receive the raw JSON value
+- Response: `{"ok": true, "data": {"set": true, "name": "position", "type": "Vector2", "value": {...}}}` (re-read after write)
+- Status codes: `200`, `400 BAD_PATH`, `404 NODE_NOT_FOUND`, `404 PROPERTY_NOT_FOUND`, `400 UNSUPPORTED_TYPE` (Callable/Signal/Object targets), `400 TYPE_MISMATCH` (value does not decode to the declared type), `400 NULL_NOT_ALLOWED` (§8: null writes rejected for value types; allowed for untyped/containers)
+- Timing: synchronous. Note: writes take effect immediately, but physics/animation side effects need a frame — pair with `/wait/frames` when the next assertion depends on them.
+- White-box caveat: writing game counters does not re-derive derived UI (e.g. a score label only updates on real pickup) — the test writes both the state and the derived label, or drives the real flow.
+
+```bash
+curl -X POST http://127.0.0.1:9090/node/root/Main/Player/property/position \
+  -H "Content-Type: application/json" \
+  -d '{"value": {"x": 500, "y": 1000}}'
 ```
 
 #### `GET /node?test_id=<id>`
@@ -826,4 +842,6 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 18)** — Determinism endpoints implemented (GTD-034): §5.9 filled (`POST /dev/seed`, `POST /dev/time_scale`, `POST /dev/pause`, `POST /dev/save/load`). Global RNG seeding, Engine time_scale, SceneTree pause toggle, save file slot verification.
 - **0.1 (draft, rev 19)** — Window resize endpoints added (GTD-053): §5.10a (`POST /window/resize`, `GET /window/state`). Runtime root-Window resizing + content-scale overrides for responsive testing; works headless; `400 TYPE_MISMATCH` validation with `details.expected`.
 - **0.1 (draft, rev 20)** - Key down/up split endpoints added (GTD-054): §5.3 (`POST /input/key_down`, `POST /input/key_up`). Held key state observable across frames (Input.is_action_pressed); same key resolution/targeting/errors as /input/key; /reset does NOT release held keys.
+- **0.1 (draft, rev 21)** - Property write endpoint added (GTD-055): §5.2 (`POST /node/<path>/property/<name>`). §4-decoded values coerced to the declared type from get_property_list(); §8 null rules enforced (400 NULL_NOT_ALLOWED for value types); errors PROPERTY_NOT_FOUND/UNSUPPORTED_TYPE/TYPE_MISMATCH. Enables game-state seeding (arrange-phase setup: teleport, counters, labels).
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.
+

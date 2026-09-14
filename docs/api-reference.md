@@ -367,3 +367,17 @@ Errors: `400 TYPE_MISMATCH` (bad width/height, invalid stretch strings with `det
 
 ### `GET /window/state` (GTD-053)
 Returns `{size, viewport_size, content_scale_size, stretch}` for the root window.
+
+### `POST /node/<path>/property/<name>` (GTD-055)
+Writes a node property. The JSON `value` is decoded per the §4 shapes and coerced to the property's declared type. The game-state seeding primitive: teleport the player, set counters, update labels.
+
+**Request Body:**
+```json
+{ "value": { "x": 500, "y": 1000 } }
+```
+
+**Response:** `{ "set": true, "name": "position", "type": "Vector2", "value": {...} }` (re-read after write)
+
+Errors: `404 PROPERTY_NOT_FOUND`, `400 UNSUPPORTED_TYPE`, `400 TYPE_MISMATCH`, `400 NULL_NOT_ALLOWED` (null writes rejected for value types per §8).
+
+White-box caveat: derived UI (score labels) does not re-derive on write - the test writes both the state and the derived label, or drives the real flow.

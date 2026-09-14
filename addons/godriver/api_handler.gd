@@ -41,6 +41,8 @@ var routes := {
 	"/node": {"get": "node_query"},
 	# Raw-regex route for /node/<path> and /node/<path>/property/<name> — GTD-013.
 	"^/node/(?<npath>.+?)[/#?]?$": {"get": "node"},
+	# GTD-055: property write (POST only; GET reads go through the route above).
+	"^/node/(?<npath>.+?)/property/(?<prop>[^/#?]+?)[/#?]?$": {"post": "node_property_set"},
 	# GTD-025: /ui/layout — plain form (test_id query) + raw-regex path form.
 	"/ui/layout": {"get": "ui_layout"},
 	"^/ui/layout/(?<npath>.+?)[/#?]?$": {"get": "ui_layout"},
@@ -136,6 +138,21 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			if req.query_match != null:
 				npath = req.query_match.get_string("npath")
 			return {"npath": npath}
+		"node_property_set":
+			# GTD-055: node path + property name from named groups, value from
+			# the JSON body (parsed on the worker thread like other POSTs).
+			var wpath := ""
+			var wprop := ""
+			if req.query_match != null:
+				wpath = req.query_match.get_string("npath")
+				wprop = req.query_match.get_string("prop")
+			var wbody: Variant = req.get_body_parsed()
+			if not (wbody is Dictionary) and not String(req.body).is_empty():
+				wbody = JSON.parse_string(String(req.body))
+			var wvalue: Variant = null
+			if wbody is Dictionary:
+				wvalue = wbody.get("value", null)
+			return {"npath": wpath, "prop": wprop, "value": wvalue}
 		"node_query":
 			# godottpd auto-converts numeric query values ("123" → int) —
 			# str() everything so test_ids stay strings.
@@ -240,6 +257,18 @@ func _main_node(args: Dictionary) -> Dictionary:
 	if idx >= 0 and idx + 10 < npath.length():
 		return TestDriverNodeHandler.get_property(root, npath.substr(0, idx), npath.substr(idx + 10))
 	return TestDriverNodeHandler.get_info(root, npath)
+
+
+## POST /node/<path>/property/<name> (GTD-055, SPEC §5.2) - property write.
+func _main_node_property_set(args: Dictionary) -> Dictionary:
+	var npath: String = args.get("npath", "")
+	var prop: String = args.get("prop", "")
+	if npath.is_empty() or prop.is_empty():
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "MISSING_PARAM", "message": "node path and property name are required"}},
+		}
+	return TestDriverNodeHandler.set_property(get_tree().root, npath, prop, args.get("value", null))
 
 
 ## GET /node?test_id=<id> (GTD-014, SPEC §5.2/§7).

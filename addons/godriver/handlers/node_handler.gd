@@ -165,3 +165,56 @@ static func _url_decode(s: String) -> String:
 		out += s[i]
 		i += 1
 	return out
+
+## POST /node/<path>/property/<name> (GTD-055) - write a node property.
+## The JSON value is decoded per SPEC §4 shapes and coerced to the
+## property's declared type from get_property_list(). Callable/Signal/
+## Object targets are rejected (400 UNSUPPORTED_TYPE).
+static func set_property(root: Node, node_path: String, prop: String, value: Variant) -> Dictionary:
+	var r := resolve(root, node_path)
+	if r.ok == false:
+		return {"code": r.code, "body": {"ok": false, "error": r.error}}
+	var node: Node = r.node
+	prop = _url_decode(prop)
+	# Find the declared type from the property list (covers engine-private
+	# and script vars; also rejects unknown properties).
+	var declared_type := -1
+	for p in node.get_property_list():
+		if p.get("name", "") == prop:
+			declared_type = int(p.get("type", TYPE_NIL))
+			break
+	if declared_type == -1:
+		return {
+			"code": 404,
+			"body": {"ok": false, "error": {"code": "PROPERTY_NOT_FOUND", "message": "node %s has no property '%s'" % [String(node.get_path()), prop]}},
+		}
+	if declared_type == TYPE_CALLABLE or declared_type == TYPE_SIGNAL or declared_type == TYPE_OBJECT:
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "UNSUPPORTED_TYPE", "message": "property '%s' holds an unsupported type (%s)" % [prop, type_string(declared_type)]}},
+		}
+	# SPEC §8: null writes are type-dependent. Allowed for untyped
+	# (Variant) properties and containers; rejected for value types.
+	if value == null and declared_type != TYPE_NIL and declared_type != TYPE_ARRAY and declared_type != TYPE_DICTIONARY:
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "NULL_NOT_ALLOWED", "message": "property '%s' is a value type (%s); null writes are rejected" % [prop, type_string(declared_type)]}},
+		}
+	var decoded: Variant = value if declared_type == TYPE_NIL else TestDriverSerializer.decode(value, declared_type)
+	if decoded == null and value != null:
+		return {
+			"code": 400,
+			"body": {"ok": false, "error": {"code": "TYPE_MISMATCH", "message": "value does not match property '%s' type (%s)" % [prop, type_string(declared_type)]}},
+		}
+	node.set(prop, decoded)
+	return {
+		"code": 200,
+		"body": {"ok": true, "data": {"set": true, "name": prop, "type": type_string(declared_type), "value": TestDriverSerializer.encode(node.get(prop))}},
+	}
+
+
+static func _property_listed(node: Node, prop: String) -> bool:
+	for p in node.get_property_list():
+		if p.get("name", "") == prop:
+			return true
+	return false

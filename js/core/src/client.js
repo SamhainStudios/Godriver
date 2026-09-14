@@ -93,6 +93,10 @@ export class ConnectionError extends Error {
  * @property {(path: string, opts?: {tweenMode?: "kill"|"await"|"none"}) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
  *   POST /scene/load — resolves only when the new scene is ready.
  * @property {(target: string, opts?: {testId?: boolean, depth?: number}) => Promise<Record<string, unknown>>} layout
+ * @property {(target: string, name: string, value: unknown, opts?: {testId?: boolean}) => Promise<Record<string, unknown>>} setProperty
+ *   POST /node/<path>/property/<name> - write a node property (GTD-055).
+ *   test_id targets are resolved via /node?test_id first. Enables game-state
+ *   seeding: teleport the player, set counters, update labels.
  * @property {(width: number, height: number, opts?: {stretchMode?: "disabled"|"canvas_items"|"viewport", aspect?: "ignore"|"keep"|"keep_width"|"keep_height"|"expand", scale?: number}) => Promise<Record<string, unknown>>} resize
  *   POST /window/resize - change the root window size and optionally override stretch config (GTD-053).
  * @property {() => Promise<Record<string, unknown>>} windowState
@@ -447,6 +451,23 @@ export async function connect(port, options = {}) {
 			}
 			return /** @type {Promise<Record<string, unknown>>} */ (
 				_request(base, token, timeoutMs, `/ui/layout${suffix}`)
+			);
+		},
+		/** @type {Driver["setProperty"]} */
+		setProperty: async (target, name, value, opts = {}) => {
+			const parsed = _parseTarget(target, opts);
+			let path;
+			if (parsed.testId) {
+				const found = await _request(base, token, timeoutMs, `/node?test_id=${encodeURIComponent(parsed.target ?? "")}`);
+				path = /** @type {Record<string, unknown>} */ (found).path;
+			} else {
+				path = String(parsed.target ?? "").replace(/^\//, "");
+			}
+			return /** @type {Promise<Record<string, unknown>>} */ (
+				_request(base, token, timeoutMs, `/node/${path}/property/${encodeURIComponent(name)}`, {
+					method: "POST",
+					body: { value },
+				})
 			);
 		},
 		/** @type {Driver["resize"]} */

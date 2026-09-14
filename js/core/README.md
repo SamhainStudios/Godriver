@@ -120,3 +120,18 @@ await driver.keyUp("move_right");
 as `pressKey`: InputMap action first, then `KEY_*` constants). A `keyDown`
 without a matching `keyUp` leaves the action held; `/reset` does not release
 held keys.
+
+## Game-state seeding (GTD-055)
+
+```js
+// Arrange: start from a specific state without replaying the flow
+await driver.setProperty("/root/Main/Player", "position", { x: 500, y: 1000 });
+await driver.setProperty("/root/Main/Player", "coins_collected", 5);
+await driver.setProperty("/root/Main", "score", 5);
+await driver.setProperty("score_label", "text", "Coins: 5 / 8", { testId: true });
+```
+
+Values are decoded per the SPEC §4 shapes and coerced to the property's
+declared type. test_id targets are resolved via `/node?test_id` first.
+White-box caveat: derived UI does not re-derive on write - write the state
+and the derived label, or drive the real flow.
