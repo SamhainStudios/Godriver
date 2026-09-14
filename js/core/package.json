@@ -1,6 +1,6 @@
 {
   "name": "@godriver/core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Portable HTTP client for the Godot Test Driver addon (SPEC v0.1). Zero runner dependencies.",
   "type": "module",
   "main": "src/client.js",
