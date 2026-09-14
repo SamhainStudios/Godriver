@@ -1,6 +1,6 @@
 # Godriver — HTTP API Specification
 
-Version: 0.1 (draft, rev 18)
+Version: 0.1 (draft, rev 19)
 Status: Sprint 1 deliverable — §1–§9 decided; §5 Phase-1 read-only endpoints filled (GTD-010); Phase 2–4 endpoint stubs documented with their implementing briefs
 Scope: The language-neutral contract. Every client (JS, Python, Go, C#)
 implements against this document and nothing else.
@@ -616,6 +616,28 @@ curl -X POST http://127.0.0.1:9090/screenshot/region \
   --output button.png
 ```
 
+### 5.10a Window resize - responsive testing (GTD-053)
+
+#### `POST /window/resize`
+
+Changes the root `Window` size at runtime and optionally overrides the content-scale (stretch) configuration. Works headless (`root.size` is settable under `--headless`; the driver's startup fix relies on the same mechanism).
+
+- Body: `{"width": int>0, "height": int>0, "stretch_mode"?: "disabled"|"canvas_items"|"viewport", "aspect"?: "ignore"|"keep"|"keep_width"|"keep_height"|"expand", "scale"?: float>0}`
+- `stretch_mode` maps to `Window.content_scale_mode`, `aspect` to `Window.content_scale_aspect`, `scale` to `Window.content_scale_factor`. Overrides apply only when provided.
+- Response `200`: `{width, height, viewport_size: {width, height}, stretch: {mode, aspect, scale}}` (effective values; the size setter applies synchronously)
+- Errors: `400 TYPE_MISMATCH` (missing/non-positive/non-numeric width or height, invalid stretch_mode/aspect string with `details.expected` listing valid values, scale <= 0)
+- Restore is the client's responsibility (call `/window/resize` again with the original values from `/window/state`).
+
+#### `GET /window/state`
+
+- Response `200`: `{size: {width, height}, viewport_size: {width, height}, content_scale_size: {width, height}, stretch: {mode, aspect, scale}}`
+
+```bash
+curl -X POST http://127.0.0.1:9090/window/resize \
+  -H "Content-Type: application/json" \
+  -d '{"width": 1280, "height": 720, "stretch_mode": "canvas_items"}'
+```
+
 ## 6. Timing Guarantees
 
 **⚠ Anti-heisenbug clause. Every input endpoint restates this.**
@@ -786,4 +808,5 @@ Breaking vs additive changes. Client implementations pin a spec version.
 - **0.1 (draft, rev 16)** — Server-side assertion endpoints implemented (GTD-032): §5.6 filled (`POST /assert/visible`, `POST /assert/enabled`, `POST /assert/property`). Evaluates target state on main thread; assertion mismatches return HTTP 200 with `passed: false` (not HTTP 500 error envelope).
 - **0.1 (draft, rev 17)** — State mutation and schema discovery implemented (GTD-033): §5.8 filled (`GET /state`, `GET/POST /state/schema`, `POST /state/set`). Supports target expansion (nodes & Resources) and SPEC §8 coercion rules + null-write type enforcement.
 - **0.1 (draft, rev 18)** — Determinism endpoints implemented (GTD-034): §5.9 filled (`POST /dev/seed`, `POST /dev/time_scale`, `POST /dev/pause`, `POST /dev/save/load`). Global RNG seeding, Engine time_scale, SceneTree pause toggle, save file slot verification.
+- **0.1 (draft, rev 19)** — Window resize endpoints added (GTD-053): §5.10a (`POST /window/resize`, `GET /window/state`). Runtime root-Window resizing + content-scale overrides for responsive testing; works headless; `400 TYPE_MISMATCH` validation with `details.expected`.
 - **Policy**: additive changes bump minor; breaking changes bump major. Clients pin a spec version.

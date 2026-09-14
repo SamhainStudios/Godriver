@@ -167,3 +167,7 @@ reports/
 PLAN.md
 ROADMAP.md
 .github/issues/
+
+# Godriver visual-regression artifacts (baselines are git-tracked, artifacts are not)
+artifacts/
+

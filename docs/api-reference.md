@@ -337,3 +337,24 @@ Captures a cropped PNG of a specific node's bounding rectangle or explicit rect.
 }
 ```
 
+
+### `POST /window/resize` (GTD-053)
+Changes the root window size at runtime, optionally overriding stretch config.
+
+**Request Body:**
+```json
+{
+  "width": 1280,
+  "height": 720,
+  "stretch_mode": "canvas_items", // optional: disabled | canvas_items | viewport
+  "aspect": "keep_width",         // optional: ignore | keep | keep_width | keep_height | expand
+  "scale": 2.0                    // optional: content_scale_factor
+}
+```
+
+**Response:** `{ "width": 1280, "height": 720, "viewport_size": {...}, "stretch": { "mode": "...", "aspect": "...", "scale": 1.0 } }`
+
+Errors: `400 TYPE_MISMATCH` (bad width/height, invalid stretch strings with `details.expected`).
+
+### `GET /window/state` (GTD-053)
+Returns `{size, viewport_size, content_scale_size, stretch}` for the root window.

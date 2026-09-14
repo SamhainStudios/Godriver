@@ -22,8 +22,18 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@godriver/core": "file:../core",
-    "@godriver/cucumber": "file:../cucumber"
+    "@godriver/core": "^0.1.0",
+    "@godriver/cucumber": "^0.1.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/cli"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/cli#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  }
 }

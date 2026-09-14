@@ -20,5 +20,15 @@
     "pngjs": "^7.0.0",
     "sharp": "^0.34.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/visual"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/visual#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  }
 }

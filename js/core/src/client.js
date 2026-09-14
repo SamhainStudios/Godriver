@@ -89,6 +89,10 @@ export class ConnectionError extends Error {
  * @property {(path: string, opts?: {tweenMode?: "kill"|"await"|"none"}) => Promise<{loaded: string, scene_ready: boolean}>} loadScene
  *   POST /scene/load — resolves only when the new scene is ready.
  * @property {(target: string, opts?: {testId?: boolean, depth?: number}) => Promise<Record<string, unknown>>} layout
+ * @property {(width: number, height: number, opts?: {stretchMode?: "disabled"|"canvas_items"|"viewport", aspect?: "ignore"|"keep"|"keep_width"|"keep_height"|"expand", scale?: number}) => Promise<Record<string, unknown>>} resize
+ *   POST /window/resize - change the root window size and optionally override stretch config (GTD-053).
+ * @property {() => Promise<Record<string, unknown>>} windowState
+ *   GET /window/state - effective window size + stretch configuration (GTD-053).
  *   GET /ui/layout — Control layout inspection.
  * @property {(target: string, signal: string, opts?: {testId?: boolean}) => Promise<{watched: boolean, target: string, signal: string}>} watchSignal
  *   POST /signal/watch — connect a signal observer.
@@ -377,6 +381,20 @@ export async function connect(port, options = {}) {
 			}
 			return /** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, `/ui/layout${suffix}`));
 		},
+		/** @type {Driver["resize"]} */
+		resize: (width, height, opts = {}) => {
+			/** @type {Record<string, unknown>} */
+			const body = { width, height };
+			if (opts.stretchMode) body.stretch_mode = opts.stretchMode;
+			if (opts.aspect) body.aspect = opts.aspect;
+			if (opts.scale !== undefined) body.scale = opts.scale;
+			return /** @type {Promise<Record<string, unknown>>} */ (
+				_interact(base, token, timeoutMs, "/window/resize", null, { ...opts, body })
+			);
+		},
+		/** @type {Driver["windowState"]} */
+		windowState: () =>
+			/** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, "/window/state")),
 		/** @type {Driver["watchSignal"]} */
 		watchSignal: (target, signal, opts = {}) => {
 			const parsed = _parseTarget(target, opts);
@@ -527,7 +545,7 @@ export async function connect(port, options = {}) {
 async function _interact(base, token, timeoutMs, path, rawTarget, opts = {}) {
 	const parsed = _parseTarget(rawTarget, opts);
 	/** @type {Record<string, unknown>} */
-	const body = {};
+	const body = opts.body ? { ...opts.body } : {};
 	if (parsed.testId && parsed.target != null) {
 		body.test_id = parsed.target;
 	} else if (parsed.target != null) {

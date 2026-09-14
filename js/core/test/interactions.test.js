@@ -102,6 +102,32 @@ test("loadScene() posts path, no auto-wait; layout() builds URL", async () => {
 	}
 });
 
+test("resize() posts /window/resize + one-frame wait; windowState() GETs", async () => {
+	globalThis.fetch = mockFetch([
+		{ match: "/window/resize", reply: () => ({ ok: true, data: { width: 800, height: 600 } }) },
+		{ match: "/window/state", reply: () => ({ ok: true, data: { size: { width: 800, height: 600 } } }) },
+		{ match: "/wait/frames", reply: () => ({ ok: true, data: { waited: 1 } }) },
+		{ match: "/health", reply: () => ({ ok: true, data: { status: "ok" } }) },
+	]);
+	try {
+		const driver = await connect(9090, { host: "mock" });
+		await driver.resize(800, 600, { stretchMode: "canvas_items", aspect: "keep_width", scale: 2 });
+		assert.deepEqual(globalThis.fetch.calls.map((c) => c.path), ["/health", "/window/resize", "/wait/frames?frames=1"]);
+		assert.deepEqual(JSON.parse(globalThis.fetch.calls[1].init.body), {
+			width: 800,
+			height: 600,
+			stretch_mode: "canvas_items",
+			aspect: "keep_width",
+			scale: 2,
+		});
+		await driver.windowState();
+		assert.equal(globalThis.fetch.calls[3].path, "/window/state");
+		driver.close();
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
 // --- live integration tests (skipped without GODOT_BIN) ---
 
 test("live: click round-trip changes the fixture label", { skip: !liveAvailable() }, async (t) => {

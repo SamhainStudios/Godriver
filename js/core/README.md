@@ -94,3 +94,16 @@ await driver.request("/reset", { method: "POST", body: { tween_mode: "kill" } })
 
 Types are JSDoc-inferred; CI runs `tsc --noEmit` against the type-test file
 (`test/types.test.ts`). No TypeScript build step — the package ships plain JS.
+
+## Responsive testing (GTD-053)
+
+```js
+const state = await driver.windowState(); // { size, viewport_size, content_scale_size, stretch }
+await driver.resize(1280, 720, { stretchMode: "canvas_items", aspect: "keep_width" });
+// ... assert layout / capture baselines at this resolution ...
+await driver.resize(state.size.width, state.size.height); // restore
+```
+
+`resize()` posts `/window/resize` and waits one frame (same auto-wait as
+click/type). See `docs/guides/visual-regression.md` for the per-resolution
+baseline recipe.

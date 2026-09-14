@@ -8,7 +8,8 @@
     ".": "./src/index.js",
     "./world": "./src/world.js",
     "./hooks": "./src/hooks.js",
-    "./steps": "./src/steps.js"
+    "./steps": "./src/steps.js",
+    "./steps/visual": "./src/steps/visual.js"
   },
   "engines": {
     "node": ">=24"
@@ -19,10 +20,26 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@godriver/core": "file:../core"
+    "@godriver/core": "^0.1.0"
   },
   "peerDependencies": {
-    "@cucumber/cucumber": "^10.0.0 || ^11.0.0"
+    "@cucumber/cucumber": "^10.0.0 || ^11.0.0",
+    "@godriver/visual": "^0.1.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/cucumber"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/cucumber#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependenciesMeta": {
+    "@godriver/visual": {
+      "optional": true
+    }
+  }
 }

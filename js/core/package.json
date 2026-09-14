@@ -15,16 +15,6 @@
     "README.md",
     "LICENSE"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SamhainStudios/godriver.git",
-    "directory": "js/core"
-  },
-  "homepage": "https://github.com/SamhainStudios/godriver#readme",
-  "bugs": "https://github.com/SamhainStudios/godriver/issues",
-  "publishConfig": {
-    "access": "public"
-  },
   "dependencies": {},
   "keywords": [
     "godot",
@@ -32,5 +22,15 @@
     "e2e",
     "bdd"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamhainStudios/godriver.git",
+    "directory": "js/core"
+  },
+  "homepage": "https://github.com/SamhainStudios/godriver/tree/master/js/core#readme",
+  "bugs": "https://github.com/SamhainStudios/godriver/issues",
+  "publishConfig": {
+    "access": "public"
+  }
 }

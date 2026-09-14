@@ -19,6 +19,7 @@ func _ready() -> void:
 
 const TestDriverAssertionHandler := preload("res://addons/godriver/handlers/assertion_handler.gd")
 const TestDriverScreenshotHandler := preload("res://addons/godriver/handlers/screenshot_handler.gd")
+const TestDriverWindowHandler := preload("res://addons/godriver/handlers/window_handler.gd")
 
 const SPEC_VERSION := "0.1"
 
@@ -84,6 +85,9 @@ var routes := {
 	# GTD-050: /screenshot/capture, /screenshot/region (SPEC §5.10).
 	"/screenshot/capture": {"get": "screenshot_capture", "post": "screenshot_capture"},
 	"/screenshot/region": {"get": "screenshot_region", "post": "screenshot_region"},
+	# GTD-053: /window/resize, /window/state (SPEC §5.10).
+	"/window/resize": {"post": "window_resize"},
+	"/window/state": {"get": "window_state"},
 }
 
 # --- /wait/frames state (GTD-026, SPEC §5.7) ---
@@ -151,7 +155,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load", "screenshot_capture", "screenshot_region":
+		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load", "screenshot_capture", "screenshot_region", "window_resize":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -651,4 +655,14 @@ func _main_screenshot_capture(args: Dictionary) -> Dictionary:
 
 func _main_screenshot_region(args: Dictionary) -> Dictionary:
 	return TestDriverScreenshotHandler.region(get_tree(), args)
+
+
+# --- GTD-053 Window Endpoints (SPEC §5.10) ---
+
+func _main_window_resize(args: Dictionary) -> Dictionary:
+	return TestDriverWindowHandler.resize(get_tree(), args)
+
+
+func _main_window_state(_args: Dictionary) -> Dictionary:
+	return TestDriverWindowHandler.state(get_tree())
 

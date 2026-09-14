@@ -58,10 +58,42 @@ Throws:
 Test helper: builds a solid-color PNG via sharp (useful for fixtures and
 synthetic baselines).
 
+## Baseline workflow (GTD-052)
+
+```js
+import { BaselineStore, assertMatchesBaseline } from "@godriver/visual";
+
+const store = new BaselineStore(); // dir "tests/baselines", artifacts "artifacts/visual"
+await assertMatchesBaseline(store, "main_menu", {
+	screenshot: driver.screenshot.bind(driver),
+	threshold: 0.01,
+});
+```
+
+- No baseline + `UPDATE_BASELINE=true`: writes `<name>.png` + `<name>.json`
+  sidecar (`{driver, width, height, roi, exclude, updatedAt}`) and passes.
+- No baseline otherwise: throws `BaselineMissingError` with guidance.
+- Baseline + `UPDATE_BASELINE=true`: regenerates and passes.
+- Baseline + match: passes (writes diff artifacts only with
+  `GODRIVER_DIFF_OUTPUT=1`).
+- Baseline + mismatch: writes `artifacts/visual/<name>/{actual,diff,report}.png|html`
+  and throws `BaselineMismatchError` (carries `reportPath`, `diffPixels`, `ratio`).
+
+`buildReport({name, baselinePng, actualPng, diffPng, baselineMeta, result})`
+builds the self-contained HTML report directly if you need it standalone.
+
+See `docs/guides/visual-regression.md` for the full workflow.
+
 ## Notes
 
 - Driver parity matters: capture baselines and CI screenshots with the same
   rendering driver (Vulkan vs llvmpipe produce pixel differences). See
-  `docs/guides/visual-regression.md` for the full workflow (GTD-052).
+  `docs/guides/visual-regression.md` for the full workflow.
 - Exclusion masks are applied to both images, so excluded regions never
   contribute to the diff.
+
+## Install
+
+```sh
+npm install @godriver/visual
+```
