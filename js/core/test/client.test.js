@@ -18,7 +18,21 @@ function mockFetch(routes) {
 		calls.push({ url, init });
 		const path = new URL(url).pathname;
 		const r = routes[path] ?? fallback;
-		return { status: r.status, text: async () => r.body };
+		const status = r.status ?? 200;
+		return {
+			status,
+			ok: status >= 200 && status < 300,
+			headers: {
+				get: (name) => {
+					const ln = name.toLowerCase();
+					if (r.headers && r.headers[ln]) return r.headers[ln];
+					if (ln === "content-type") return r.contentType ?? "application/json";
+					return null;
+				},
+			},
+			text: async () => r.body ?? "",
+			arrayBuffer: async () => r.rawBuffer ?? Buffer.from(r.body ?? ""),
+		};
 	};
 	const m = mock.method(globalThis, "fetch", impl);
 	return { m, calls };
@@ -294,3 +308,114 @@ test("reset, loadScene with tweenMode, assertText, and waitTween", async () => {
 		m.mock.restore();
 	}
 });
+
+test("screenshot with base64 and binary format", async () => {
+	const fakePng = Buffer.from("fake_png_data");
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/screenshot/capture": {
+			status: 200,
+			contentType: "image/png",
+			headers: { "x-image-width": "1280", "x-image-height": "720" },
+			rawBuffer: fakePng,
+		},
+	});
+	try {
+		const driver = await connect(9090);
+		const binaryRes = await driver.screenshot();
+		assert.ok(binaryRes.buffer);
+		assert.equal(Buffer.from(binaryRes.buffer).toString(), "fake_png_data");
+		assert.equal(binaryRes.width, 1280);
+		assert.equal(binaryRes.height, 720);
+		assert.equal(binaryRes.contentType, "image/png");
+	} finally {
+		m.mock.restore();
+	}
+
+	const { m: m2 } = mockFetch({
+		"/health": HEALTH_OK,
+		"/screenshot/capture": {
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ ok: true, data: { image: "base64str", width: 800, height: 600, format: "png" } }),
+		},
+	});
+	try {
+		const driver = await connect(9090);
+		const base64Res = await driver.screenshot({ format: "base64" });
+		assert.equal(base64Res.image, "base64str");
+		assert.equal(base64Res.width, 800);
+		assert.equal(base64Res.height, 600);
+	} finally {
+		m2.mock.restore();
+	}
+});
+
+test("screenshotRegion with test_id and explicit rect", async () => {
+	const { m, calls } = mockFetch({
+		"/health": HEALTH_OK,
+		"/screenshot/region": {
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ ok: true, data: { image: "region_base64", width: 100, height: 50, format: "png" } }),
+		},
+	});
+	try {
+		const driver = await connect(9090);
+		const res = await driver.screenshotRegion("test_id:my_button", {
+			format: "base64",
+			rect: { x: 10, y: 10, w: 100, h: 50 },
+		});
+		assert.equal(res.image, "region_base64");
+		const sentBody = JSON.parse(calls[1].init.body);
+		assert.equal(sentBody.test_id, "my_button");
+		assert.deepEqual(sentBody.rect, { x: 10, y: 10, w: 100, h: 50 });
+	} finally {
+		m.mock.restore();
+	}
+});
+
+test("screenshot handles HEADLESS_RENDERING_DISABLED and HDR_NOT_SUPPORTED errors", async () => {
+	const { m } = mockFetch({
+		"/health": HEALTH_OK,
+		"/screenshot/capture": {
+			status: 400,
+			contentType: "application/json",
+			body: JSON.stringify({
+				ok: false,
+				error: { code: "HEADLESS_RENDERING_DISABLED", message: "cannot capture screenshot in headless mode" },
+			}),
+		},
+	});
+	try {
+		const driver = await connect(9090);
+		await assert.rejects(
+			driver.screenshot(),
+			(e) => e instanceof DriverError && e.code === "HEADLESS_RENDERING_DISABLED" && e.status === 400,
+		);
+	} finally {
+		m.mock.restore();
+	}
+
+	const { m: m2 } = mockFetch({
+		"/health": HEALTH_OK,
+		"/screenshot/capture": {
+			status: 400,
+			contentType: "application/json",
+			body: JSON.stringify({
+				ok: false,
+				error: { code: "HDR_NOT_SUPPORTED", message: "HDR not supported" },
+			}),
+		},
+	});
+	try {
+		const driver = await connect(9090);
+		await assert.rejects(
+			driver.screenshot({ hdr: true }),
+			(e) => e instanceof DriverError && e.code === "HDR_NOT_SUPPORTED" && e.status === 400,
+		);
+	} finally {
+		m2.mock.restore();
+	}
+});
+

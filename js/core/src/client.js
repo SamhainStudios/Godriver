@@ -126,6 +126,10 @@ export class ConnectionError extends Error {
  *   POST /dev/pause — toggle SceneTree pause.
  * @property {(slot: string) => Promise<{slot: string, loaded: boolean, path?: string}>} loadSaveSlot
  *   POST /dev/save/load — verify/load save slot.
+ * @property {(opts?: {format?: "binary"|"base64", hdr?: boolean, viewport?: string}) => Promise<any>} screenshot
+ *   POST /screenshot/capture — capture full viewport PNG.
+ * @property {(target?: string, opts?: {testId?: boolean, rect?: {x: number, y: number, w: number, h: number}, format?: "binary"|"base64", hdr?: boolean, viewport?: string}) => Promise<any>} screenshotRegion
+ *   POST /screenshot/region — capture node bounds or explicit rect crop as PNG.
  * @property {() => void} close Release underlying agent resources.
  */
 
@@ -189,6 +193,80 @@ async function _request(base, token, timeoutMs, path, init = {}) {
 		res.status,
 		err.details ?? null,
 	);
+}
+
+/**
+ * Perform a binary request (e.g. screenshot) expecting raw bytes or JSON error.
+ *
+ * @param {string} base Base URL.
+ * @param {string} token Bearer token.
+ * @param {number} timeoutMs AbortSignal timeout.
+ * @param {string} path Endpoint path.
+ * @param {{method?: string, body?: unknown}} [init]
+ * @returns {Promise<{buffer: Uint8Array, width: number, height: number, contentType: string}>}
+ */
+async function _requestBinary(base, token, timeoutMs, path, init = {}) {
+	const method = init.method ?? "GET";
+	/** @type {Record<string, string>} */
+	const headers = {};
+	if (token !== "") {
+		headers.authorization = `Bearer ${token}`;
+	}
+	if (init.body !== undefined) {
+		headers["content-type"] = "application/json";
+	}
+	/** @type {RequestInit} */
+	const req = {
+		method,
+		signal: AbortSignal.timeout(timeoutMs),
+		headers,
+	};
+	if (init.body !== undefined) {
+		req.body = JSON.stringify(init.body);
+	}
+	/** @type {Response} */
+	let res;
+	try {
+		res = await fetch(base + path, req);
+	} catch (e) {
+		if (/** @type {Error} */ (e).name === "TimeoutError" || /** @type {Error} */ (e).name === "AbortError") {
+			throw new ConnectionError(`request to ${path} timed out after ${timeoutMs}ms`, e);
+		}
+		throw new ConnectionError(`addon unreachable at ${base} (${/** @type {Error} */ (e).message})`, e);
+	}
+
+	const contentType = res.headers.get("content-type") || "";
+	if (contentType.includes("application/json")) {
+		const text = await res.text();
+		let envelope;
+		try {
+			envelope = JSON.parse(text);
+		} catch {
+			throw new DriverError("INTERNAL_ERROR", `malformed envelope from ${path} (HTTP ${res.status})`, res.status);
+		}
+		if (envelope.ok === true) {
+			return envelope.data;
+		}
+		const err = envelope.error ?? {};
+		throw new DriverError(
+			String(err.code ?? "INTERNAL_ERROR"),
+			String(err.message ?? `request to ${path} failed (HTTP ${res.status})`),
+			res.status,
+			err.details ?? null,
+		);
+	}
+
+	if (!res.ok) {
+		throw new DriverError("HTTP_ERROR", `request failed with HTTP ${res.status}`, res.status);
+	}
+
+	const arrayBuffer = await res.arrayBuffer();
+	return {
+		buffer: new Uint8Array(arrayBuffer),
+		width: parseInt(res.headers.get("x-image-width") || "0", 10),
+		height: parseInt(res.headers.get("x-image-height") || "0", 10),
+		contentType,
+	};
 }
 
 /**
@@ -392,6 +470,43 @@ export async function connect(port, options = {}) {
 		setPause: (enabled) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/pause", { method: "POST", body: { enabled } })),
 		/** @type {Driver["loadSaveSlot"]} */
 		loadSaveSlot: (slot) => /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/dev/save/load", { method: "POST", body: { slot } })),
+		/** @type {Driver["screenshot"]} */
+		screenshot: (opts = {}) => {
+			const format = opts.format ?? "binary";
+			/** @type {Record<string, unknown>} */
+			const body = {};
+			if (opts.format !== undefined) body.format = opts.format;
+			if (opts.hdr !== undefined) body.hdr = opts.hdr;
+			if (opts.viewport !== undefined) body.viewport = opts.viewport;
+
+			if (format === "base64") {
+				return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/screenshot/capture", { method: "POST", body }));
+			}
+			return /** @type {Promise<any>} */ (_requestBinary(base, token, timeoutMs, "/screenshot/capture", { method: "POST", body }));
+		},
+		/** @type {Driver["screenshotRegion"]} */
+		screenshotRegion: (target, opts = {}) => {
+			const format = opts.format ?? "binary";
+			/** @type {Record<string, unknown>} */
+			const body = {};
+			if (target) {
+				const parsed = _parseTarget(target, opts);
+				if (parsed.testId) {
+					body.test_id = parsed.target;
+				} else {
+					body.path = parsed.target;
+				}
+			}
+			if (opts.rect !== undefined) body.rect = opts.rect;
+			if (opts.format !== undefined) body.format = opts.format;
+			if (opts.hdr !== undefined) body.hdr = opts.hdr;
+			if (opts.viewport !== undefined) body.viewport = opts.viewport;
+
+			if (format === "base64") {
+				return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/screenshot/region", { method: "POST", body }));
+			}
+			return /** @type {Promise<any>} */ (_requestBinary(base, token, timeoutMs, "/screenshot/region", { method: "POST", body }));
+		},
 		/** @type {Driver["close"]} */
 		close: () => {},
 	};

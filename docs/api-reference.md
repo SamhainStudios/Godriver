@@ -303,3 +303,37 @@ Returns server status, engine version, and specification version.
   }
 }
 ```
+
+---
+
+## 10. Screenshots & Visuals (v0.3 / Phase 5)
+
+> Requires active rendering context (fails under `--headless` with `400 HEADLESS_RENDERING_DISABLED`).
+
+### `POST /screenshot/capture` (or `GET`)
+Captures full viewport PNG.
+
+**Request Body:**
+```json
+{
+  "format": "binary", // "binary" (default) or "base64"
+  "viewport": "/root/SubViewport" // optional
+}
+```
+
+**Response (200 OK):**
+- Binary PNG (`Content-Type: image/png`) by default.
+- If `format="base64"`, JSON envelope: `{"ok": true, "data": {"image": "<base64>", "width": 1920, "height": 1080, "format": "png"}}`.
+
+### `POST /screenshot/region` (or `GET`)
+Captures a cropped PNG of a specific node's bounding rectangle or explicit rect.
+
+**Request Body:**
+```json
+{
+  "test_id": "main_menu", // or "path": "/root/Main/Menu"
+  "rect": { "x": 0, "y": 0, "w": 300, "h": 200 }, // optional override
+  "format": "binary"
+}
+```
+

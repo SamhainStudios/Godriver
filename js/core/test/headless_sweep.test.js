@@ -14,10 +14,10 @@ test("headless endpoint sweep (live Godot instance)", { skip: !LIVE && "Set GODR
 	assert.ok(health.godot_version);
 
 	// 2. Node & Scene Inspection
-	const scene = await driver.currentScene();
+	const scene = await driver.request("/scene/current");
 	assert.ok(scene);
 
-	const rootNode = await driver.node("/root");
+	const rootNode = await driver.request("/node/root");
 	assert.ok(rootNode);
 
 	// 3. State & Assertions
@@ -37,7 +37,7 @@ test("headless endpoint sweep (live Godot instance)", { skip: !LIVE && "Set GODR
 	// 5. Signals
 	await driver.watchSignal("/root", "tree_entered");
 	const polls = await driver.pollSignals({ target: "/root" });
-	assert.ok(Array.isArray(polls.emitted));
+	assert.ok(Array.isArray(polls.emissions));
 
 	// 6. Dev determinism controls
 	const seeded = await driver.setSeed(42);
@@ -48,6 +48,16 @@ test("headless endpoint sweep (live Godot instance)", { skip: !LIVE && "Set GODR
 
 	const pauseState = await driver.setPause(false);
 	assert.equal(pauseState.paused, false);
+
+	// 7. Screenshot endpoints under --headless must reject with HEADLESS_RENDERING_DISABLED
+	await assert.rejects(
+		driver.screenshot(),
+		(e) => e.code === "HEADLESS_RENDERING_DISABLED" && e.status === 400,
+	);
+	await assert.rejects(
+		driver.screenshotRegion("/root"),
+		(e) => e.code === "HEADLESS_RENDERING_DISABLED" && e.status === 400,
+	);
 
 	driver.close();
 });

@@ -565,6 +565,57 @@ curl http://127.0.0.1:9090/assets/loaded
 - **Driver parity rule**: baselines MUST be captured with the same rendering method/driver as CI — a Vulkan-GPU baseline will not diff clean against llvmpipe
 - **Headless layout defense**: on startup under `--headless`, the driver explicitly sets `get_tree().root.size` from the `display/window/size/viewport_width/height` project settings (DisplayServer returns dummy values headless; this guarantees `/ui/layout` bounds evaluate against the intended resolution). Validated in CI.
 
+#### `POST /screenshot/capture` (and `GET /screenshot/capture`)
+
+Captures a full viewport frame as PNG.
+
+- Params (query or JSON body):
+  - `viewport` (string, optional): NodePath of target Viewport / SubViewport (defaults to root Viewport)
+  - `format` (string, optional): `"binary"` (default) or `"base64"`
+  - `hdr` (bool, optional): if `true`, returns `400 HDR_NOT_SUPPORTED`
+- Response:
+  - Default: `200 OK`, `Content-Type: image/png`, body is raw PNG bytes. Headers: `X-Image-Width`, `X-Image-Height`.
+  - If `format=base64`: `200 OK`, `Content-Type: application/json`:
+    `{"ok": true, "data": {"image": "<base64>", "width": <int>, "height": <int>, "format": "png"}}`
+- Status codes:
+  - `200`: screenshot captured successfully
+  - `400 HEADLESS_RENDERING_DISABLED`: running under `--headless`
+  - `400 HDR_NOT_SUPPORTED`: HDR requested or active
+  - `404 VIEWPORT_NOT_FOUND`: specified viewport NodePath does not exist
+  - `500 TEXTURE_UNAVAILABLE` / `IMAGE_EMPTY`: engine failure reading texture
+
+```bash
+curl -X POST http://127.0.0.1:9090/screenshot/capture --output screenshot.png
+```
+
+#### `POST /screenshot/region` (and `GET /screenshot/region`)
+
+Captures a cropped region of the viewport bounded by a target node or explicit rectangle.
+
+- Params (query or JSON body):
+  - `path` (string, optional): NodePath of target Control/CanvasItem
+  - `test_id` (string, optional): metadata `test_id` of target node
+  - `rect` (object, optional): explicit rectangle `{"x": <int>, "y": <int>, "w": <int>, "h": <int>}`
+  - `viewport` (string, optional): NodePath of target Viewport
+  - `format` (string, optional): `"binary"` (default) or `"base64"`
+  - `hdr` (bool, optional): if `true`, returns `400 HDR_NOT_SUPPORTED`
+- Response:
+  - Same format contract as `/screenshot/capture`, cropped to the bounding box.
+- Status codes:
+  - Same as `/screenshot/capture`, plus:
+  - `400 MISSING_PARAM`: neither `path`, `test_id`, nor `rect` provided
+  - `400 BAD_TARGET`: target node is not a CanvasItem or Control
+  - `400 INVALID_RECT`: `w` or `h` <= 0
+  - `400 OUT_OF_BOUNDS`: target rect falls entirely outside the viewport
+  - `404 TARGET_NOT_FOUND`: node matching `path` or `test_id` not found
+
+```bash
+curl -X POST http://127.0.0.1:9090/screenshot/region \
+  -H "Content-Type: application/json" \
+  -d '{"test_id": "start_button"}' \
+  --output button.png
+```
+
 ## 6. Timing Guarantees
 
 **⚠ Anti-heisenbug clause. Every input endpoint restates this.**

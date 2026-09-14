@@ -18,6 +18,7 @@ func _ready() -> void:
 
 
 const TestDriverAssertionHandler := preload("res://addons/godriver/handlers/assertion_handler.gd")
+const TestDriverScreenshotHandler := preload("res://addons/godriver/handlers/screenshot_handler.gd")
 
 const SPEC_VERSION := "0.1"
 
@@ -80,6 +81,9 @@ var routes := {
 	"/dev/time_scale": {"post": "dev_time_scale"},
 	"/dev/pause": {"post": "dev_pause"},
 	"/dev/save/load": {"post": "dev_save_load"},
+	# GTD-050: /screenshot/capture, /screenshot/region (SPEC §5.10).
+	"/screenshot/capture": {"get": "screenshot_capture", "post": "screenshot_capture"},
+	"/screenshot/region": {"get": "screenshot_region", "post": "screenshot_region"},
 }
 
 # --- /wait/frames state (GTD-026, SPEC §5.7) ---
@@ -147,7 +151,7 @@ func _extract_args(handler_name: String, req: HttpRequest) -> Dictionary:
 			}
 		"wait_frames":
 			return {"frames": req.query.get("frames", 1)}
-		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load":
+		"input_click", "input_type", "input_key", "signal_watch", "signal_poll", "signal_wait", "assert_visible", "assert_enabled", "assert_property", "state", "state_schema", "state_set", "dev_seed", "dev_time_scale", "dev_pause", "dev_save_load", "screenshot_capture", "screenshot_region":
 			var res_dict := {}
 			var body: Variant = req.get_body_parsed()
 			if not (body is Dictionary) and not String(req.body).is_empty():
@@ -181,8 +185,18 @@ func dispatch(handler_name: String, req: HttpRequest, res: HttpResponse) -> bool
 		return _dispatch_signal_wait(req, res)
 	var args := _extract_args(handler_name, req)
 	var result: Variant = dispatcher.submit(Callable(self, "_main_" + handler_name).bind(args))
-	if result is Dictionary and result.has("code") and result.has("body"):
-		res.json(int(result.code), result.body)
+	if result is Dictionary and result.has("code"):
+		var code := int(result.code)
+		if result.has("raw") and result.raw is PackedByteArray:
+			var content_type: String = result.get("content_type", "image/png")
+			if result.has("headers") and result.headers is Dictionary:
+				for h in result.headers:
+					res.set(StringName(h), result.headers[h])
+			res.send_raw(code, result.raw, content_type)
+		elif result.has("body"):
+			res.json(code, result.body)
+		else:
+			res.json(500, {"ok": false, "error": {"code": "INTERNAL_ERROR", "message": "handler returned empty body"}})
 	else:
 		# Error funnel: handler crashed (script error → null) or returned
 		# malformed data. Respond 500; the server stays up.
@@ -627,4 +641,14 @@ func _main_assert_enabled(args: Dictionary) -> Dictionary:
 
 func _main_assert_property(args: Dictionary) -> Dictionary:
 	return TestDriverAssertionHandler.assert_property(get_tree().root, args)
+
+
+# --- GTD-050 Screenshot Endpoints (SPEC §5.10) ---
+
+func _main_screenshot_capture(args: Dictionary) -> Dictionary:
+	return TestDriverScreenshotHandler.capture(get_tree(), args)
+
+
+func _main_screenshot_region(args: Dictionary) -> Dictionary:
+	return TestDriverScreenshotHandler.region(get_tree(), args)
 

@@ -268,20 +268,16 @@ static func _click_collision_object(root: Node, co: CollisionObject2D) -> String
 	# Press + release: unconsumed by GUI (no Control at the point) → queued
 	# into physics_picking_events by _push_unhandled_input_internal →
 	# delivered by _process_picking on the next physics frame(s).
-	var press_ev := _make_mouse_button(local_pos, local_pos, true)
-	viewport.push_input(press_ev, true)
+	#
+	# NOTE: do NOT "fall back" to calling co._input_event() directly. That is
+	# the VIRTUAL method (only exists when the game script overrides it —
+	# calling it on a plain Area2D aborts with "Nonexistent function"), it
+	# does NOT emit the input_event signal, and it bypasses the real input
+	# pipeline (no mouse_entered, no physics_2d_mouseover tracking, hardcoded
+	# shape_idx=0). Physics frames always tick under --headless; delivery is
+	# guaranteed by notify_mouse_entered() above + the root-size fix.
+	viewport.push_input(_make_mouse_button(local_pos, local_pos, true), true)
 	viewport.push_input(_make_mouse_button(local_pos, local_pos, false), true)
-
-	# Bug #1 — Headless fallback: _process_picking() only runs on physics
-	# frames, which may not tick in --headless with no active physics bodies.
-	# Directly call _input_event on the CollisionObject2D to guarantee the
-	# input_event signal fires regardless of physics frame state.
-	# This is safe in windowed mode too — the signal may fire twice (once
-	# from _process_picking, once from here), but that matches a real
-	# double-tap scenario and game code should be idempotent anyway.
-	# CollisionObject2D._input_event(viewport, event, shape_idx) is the
-	# virtual method that _process_picking ultimately calls.
-	co._input_event(viewport, press_ev, 0)
 	return ""
 
 

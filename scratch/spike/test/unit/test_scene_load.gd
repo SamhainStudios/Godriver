@@ -90,9 +90,9 @@ func test_load_and_reset_share_in_flight_guard() -> void:
 	var api: TestDriverApi = _server._api
 	var slot := {"done": false, "result": null}
 	var mutex := Mutex.new()
-	var first: Dictionary = api._start_scene_load(ALT_SCENE, slot, mutex)
+	var first: Dictionary = api._start_scene_load(ALT_SCENE, "none", slot, mutex)
 	assert_int(first["code"]).is_equal(200)
-	var second: Dictionary = api._start_scene_load(ALT_SCENE, slot, mutex)
+	var second: Dictionary = api._start_scene_load(ALT_SCENE, "none", slot, mutex)
 	assert_int(second["code"]).is_equal(503)
 	assert_str(str(second["body"]["error"]["code"])).is_equal("SERVER_BUSY")
 	# Also via the reset start-task (same guard).
