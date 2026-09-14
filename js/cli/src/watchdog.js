@@ -35,7 +35,7 @@ export class Watchdog {
 	}
 
 	async checkHealth() {
-		if (!this.running) return;
+		if (!this.running) {return;}
 
 		// Check if launcher process exited
 		if (this.launcher.process && this.launcher.process.exitCode !== null) {

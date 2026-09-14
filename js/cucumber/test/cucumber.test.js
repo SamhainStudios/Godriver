@@ -2,7 +2,7 @@
  * Unit tests for @godriver/cucumber package (world, hooks, steps binding).
  * Uses node:test (built-in, zero deps).
  */
-import { test, mock } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GodotWorld, registerHooks, registerSteps } from "../src/index.js";
 
@@ -49,3 +49,4 @@ test("registerSteps registers all ~15 step definitions", () => {
 	assert.ok(patterns.includes("I watch signal {string} on {string}"));
 	assert.ok(patterns.includes("I set time scale to {float}"));
 });
+

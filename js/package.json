@@ -13,6 +13,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --allowJs --checkJs core/test/types.test.ts visual/test/types.test.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test:unit": "node --test core/test/client.test.js core/test/interactions.test.js cucumber/test/cucumber.test.js cucumber/test/visual-steps.test.js cli/test/cli.test.js visual/test/comparator.test.js visual/test/baselines.test.js",
     "changeset": "changeset",
     "changeset:version": "changeset version",
@@ -23,6 +25,8 @@
     "@changesets/cli": "^2.29.8",
     "@types/node": "^22.20.2",
     "@types/pngjs": "^6.0.5",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "typescript": "^7.0.2"
   },
   "allowScripts": {

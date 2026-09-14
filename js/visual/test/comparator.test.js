@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compare, solidPng, SizeMismatchError } from "../src/comparator.js";
+import { compare, solidPng } from "../src/comparator.js";
 import sharp from "sharp";
 
 /** Build a PNG with a single pixel changed from a base solid color. */
@@ -123,3 +123,4 @@ test("invalid PNG throws InvalidImageError", async () => {
 		(err) => err.name === "InvalidImageError",
 	);
 });
+

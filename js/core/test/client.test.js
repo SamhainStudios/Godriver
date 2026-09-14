@@ -14,8 +14,8 @@ import { connect, DriverError, ConnectionError } from "../src/client.js";
 function mockFetch(routes) {
 	const calls = [];
 	const fallback = Object.values(routes)[0];
-	const impl = async (url, init) => {
-		calls.push({ url, init });
+	const impl = async (url, _init) => {
+		calls.push({ url, init: _init });
 		const path = new URL(url).pathname;
 		const r = routes[path] ?? fallback;
 		const status = r.status ?? 200;
@@ -25,8 +25,8 @@ function mockFetch(routes) {
 			headers: {
 				get: (name) => {
 					const ln = name.toLowerCase();
-					if (r.headers && r.headers[ln]) return r.headers[ln];
-					if (ln === "content-type") return r.contentType ?? "application/json";
+					if (r.headers && r.headers[ln]) {return r.headers[ln];}
+					if (ln === "content-type") {return r.contentType ?? "application/json";}
 					return null;
 				},
 			},
@@ -186,9 +186,9 @@ test("signal methods send correct request bodies", async () => {
 
 test("assertVisible polls until passed true", async () => {
 	let attempt = 0;
-	const m = mock.method(globalThis, "fetch", async (url, init) => {
+	const m = mock.method(globalThis, "fetch", async (url, _init) => {
 		const path = new URL(url).pathname;
-		if (path === "/health") return { status: 200, text: async () => HEALTH_OK.body };
+		if (path === "/health") {return { status: 200, text: async () => HEALTH_OK.body };}
 		attempt++;
 		const passed = attempt >= 2;
 		return {
@@ -209,7 +209,7 @@ test("assertVisible polls until passed true", async () => {
 test("assertVisible throws DriverError ASSERTION_FAILED on timeout", async () => {
 	const m = mock.method(globalThis, "fetch", async (url) => {
 		const path = new URL(url).pathname;
-		if (path === "/health") return { status: 200, text: async () => HEALTH_OK.body };
+		if (path === "/health") {return { status: 200, text: async () => HEALTH_OK.body };}
 		return {
 			status: 200,
 			text: async () => JSON.stringify({ ok: true, data: { target: "/root/Main", actual: false, expected: true, passed: false } }),
@@ -311,7 +311,7 @@ test("reset, loadScene with tweenMode, assertText, and waitTween", async () => {
 
 test("screenshot with base64 and binary format", async () => {
 	const fakePng = Buffer.from("fake_png_data");
-	const { m, calls } = mockFetch({
+	const { m } = mockFetch({
 		"/health": HEALTH_OK,
 		"/screenshot/capture": {
 			status: 200,
@@ -418,4 +418,9 @@ test("screenshot handles HEADLESS_RENDERING_DISABLED and HDR_NOT_SUPPORTED error
 		m2.mock.restore();
 	}
 });
+
+
+
+
+
 

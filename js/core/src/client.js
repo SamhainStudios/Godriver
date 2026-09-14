@@ -346,7 +346,7 @@ export async function connect(port, options = {}) {
 		reset: (opts = {}) => {
 			/** @type {Record<string, unknown>} */
 			const body = {};
-			if (opts.tweenMode) body.tween_mode = opts.tweenMode;
+			if (opts.tweenMode) {body.tween_mode = opts.tweenMode;}
 			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/reset", { method: "POST", body }));
 		},
 		/** @type {Driver["click"]} */
@@ -363,7 +363,7 @@ export async function connect(port, options = {}) {
 			const normalizedPath = path.startsWith("res://") || path.startsWith("user://") ? path : `res://${path.replace(/^\//, "")}`;
 			/** @type {Record<string, unknown>} */
 			const body = { path: normalizedPath };
-			if (opts.tweenMode) body.tween_mode = opts.tweenMode;
+			if (opts.tweenMode) {body.tween_mode = opts.tweenMode;}
 			return /** @type {Promise<{loaded: string, scene_ready: boolean}>} */ (
 				_request(base, token, timeoutMs, "/scene/load", { method: "POST", body })
 			);
@@ -374,10 +374,10 @@ export async function connect(port, options = {}) {
 			let suffix = "";
 			if (parsed.testId) {
 				suffix = `?test_id=${encodeURIComponent(parsed.target ?? "")}`;
-				if (opts.depth) suffix += `&depth=${opts.depth}`;
+				if (opts.depth) {suffix += `&depth=${opts.depth}`;}
 			} else {
 				suffix = `/${String(parsed.target ?? "").replace(/^\//, "")}`;
-				if (opts.depth) suffix += `?depth=${opts.depth}`;
+				if (opts.depth) {suffix += `?depth=${opts.depth}`;}
 			}
 			return /** @type {Promise<Record<string, unknown>>} */ (_request(base, token, timeoutMs, `/ui/layout${suffix}`));
 		},
@@ -385,9 +385,9 @@ export async function connect(port, options = {}) {
 		resize: (width, height, opts = {}) => {
 			/** @type {Record<string, unknown>} */
 			const body = { width, height };
-			if (opts.stretchMode) body.stretch_mode = opts.stretchMode;
-			if (opts.aspect) body.aspect = opts.aspect;
-			if (opts.scale !== undefined) body.scale = opts.scale;
+			if (opts.stretchMode) {body.stretch_mode = opts.stretchMode;}
+			if (opts.aspect) {body.aspect = opts.aspect;}
+			if (opts.scale !== undefined) {body.scale = opts.scale;}
 			return /** @type {Promise<Record<string, unknown>>} */ (
 				_interact(base, token, timeoutMs, "/window/resize", null, { ...opts, body })
 			);
@@ -400,15 +400,15 @@ export async function connect(port, options = {}) {
 			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { signal };
-			if (parsed.testId) body.test_id = parsed.target;
-			else body.path = parsed.target;
+			if (parsed.testId) {body.test_id = parsed.target;}
+			else {body.path = parsed.target;}
 			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/signal/watch", { method: "POST", body }));
 		},
 		/** @type {Driver["pollSignals"]} */
 		pollSignals: (opts = {}) => {
 			const q = new URLSearchParams();
-			if (opts.target) q.set("target", opts.target);
-			if (opts.signal) q.set("signal", opts.signal);
+			if (opts.target) {q.set("target", opts.target);}
+			if (opts.signal) {q.set("signal", opts.signal);}
 			const qs = q.toString();
 			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, `/signal/poll${qs ? "?" + qs : ""}`));
 		},
@@ -417,9 +417,9 @@ export async function connect(port, options = {}) {
 			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { signal };
-			if (parsed.testId) body.test_id = parsed.target;
-			else body.path = parsed.target;
-			if (opts.timeout !== undefined) body.timeout = opts.timeout;
+			if (parsed.testId) {body.test_id = parsed.target;}
+			else {body.path = parsed.target;}
+			if (opts.timeout !== undefined) {body.timeout = opts.timeout;}
 			const effectiveTimeout = opts.timeoutMs ?? (opts.timeout ? (opts.timeout + 2) * 1000 : 35000);
 			return /** @type {Promise<any>} */ (_request(base, token, effectiveTimeout, "/signal/wait", { method: "POST", body }));
 		},
@@ -428,8 +428,8 @@ export async function connect(port, options = {}) {
 			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { expected: opts.expected ?? true };
-			if (parsed.testId) body.test_id = parsed.target;
-			else body.path = parsed.target;
+			if (parsed.testId) {body.test_id = parsed.target;}
+			else {body.path = parsed.target;}
 			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/visible", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["assertEnabled"]} */
@@ -437,8 +437,8 @@ export async function connect(port, options = {}) {
 			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { expected: opts.expected ?? true };
-			if (parsed.testId) body.test_id = parsed.target;
-			else body.path = parsed.target;
+			if (parsed.testId) {body.test_id = parsed.target;}
+			else {body.path = parsed.target;}
 			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/enabled", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["assertProperty"]} */
@@ -446,8 +446,8 @@ export async function connect(port, options = {}) {
 			const parsed = _parseTarget(target, opts);
 			/** @type {Record<string, unknown>} */
 			const body = { property, expected };
-			if (parsed.testId) body.test_id = parsed.target;
-			else body.path = parsed.target;
+			if (parsed.testId) {body.test_id = parsed.target;}
+			else {body.path = parsed.target;}
 			return /** @type {Promise<any>} */ (_pollAssertion(base, token, "/assert/property", body, opts.timeoutMs ?? 3000, opts.pollIntervalMs ?? 50));
 		},
 		/** @type {Driver["assertText"]} */
@@ -459,7 +459,7 @@ export async function connect(port, options = {}) {
 		waitTween: (opts = {}) => {
 			/** @type {Record<string, unknown>} */
 			const body = {};
-			if (opts.timeout !== undefined) body.timeout = opts.timeout;
+			if (opts.timeout !== undefined) {body.timeout = opts.timeout;}
 			return /** @type {Promise<any>} */ (_request(base, token, opts.timeoutMs ?? timeoutMs, "/wait/tween", { method: "POST", body }));
 		},
 		/** @type {Driver["waitVisible"]} */
@@ -476,7 +476,7 @@ export async function connect(port, options = {}) {
 		setState: (values, target) => {
 			/** @type {Record<string, unknown>} */
 			const body = { values };
-			if (target) body.target = target;
+			if (target) {body.target = target;}
 			return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/state/set", { method: "POST", body }));
 		},
 		/** @type {Driver["setSeed"]} */
@@ -493,9 +493,9 @@ export async function connect(port, options = {}) {
 			const format = opts.format ?? "binary";
 			/** @type {Record<string, unknown>} */
 			const body = {};
-			if (opts.format !== undefined) body.format = opts.format;
-			if (opts.hdr !== undefined) body.hdr = opts.hdr;
-			if (opts.viewport !== undefined) body.viewport = opts.viewport;
+			if (opts.format !== undefined) {body.format = opts.format;}
+			if (opts.hdr !== undefined) {body.hdr = opts.hdr;}
+			if (opts.viewport !== undefined) {body.viewport = opts.viewport;}
 
 			if (format === "base64") {
 				return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/screenshot/capture", { method: "POST", body }));
@@ -515,10 +515,10 @@ export async function connect(port, options = {}) {
 					body.path = parsed.target;
 				}
 			}
-			if (opts.rect !== undefined) body.rect = opts.rect;
-			if (opts.format !== undefined) body.format = opts.format;
-			if (opts.hdr !== undefined) body.hdr = opts.hdr;
-			if (opts.viewport !== undefined) body.viewport = opts.viewport;
+			if (opts.rect !== undefined) {body.rect = opts.rect;}
+			if (opts.format !== undefined) {body.format = opts.format;}
+			if (opts.hdr !== undefined) {body.hdr = opts.hdr;}
+			if (opts.viewport !== undefined) {body.viewport = opts.viewport;}
 
 			if (format === "base64") {
 				return /** @type {Promise<any>} */ (_request(base, token, timeoutMs, "/screenshot/region", { method: "POST", body }));

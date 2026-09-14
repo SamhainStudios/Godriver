@@ -18,11 +18,6 @@ async function tempStore() {
 	};
 }
 
-/** @param {string} png64 base64 PNG @returns {Buffer} */
-function fakeCapturePng(png64) {
-	return Buffer.from(png64, "base64");
-}
-
 /** Build a screenshot fn returning a fixed PNG. @param {Buffer} png @returns {AssertOptions["screenshot"]} */
 function captureFn(png) {
 	return async () => ({ buffer: new Uint8Array(png), width: 32, height: 32, contentType: "image/png" });
@@ -31,15 +26,15 @@ function captureFn(png) {
 function withEnv(env, fn) {
 	/** @type {Record<string, string | undefined>} */
 	const prev = {};
-	for (const k of Object.keys(env)) prev[k] = process.env[k];
+	for (const k of Object.keys(env)) {prev[k] = process.env[k];}
 	return async () => {
-		for (const [k, v] of Object.entries(env)) process.env[k] = v;
+		for (const [k, v] of Object.entries(env)) {process.env[k] = v;}
 		try {
 			await fn();
 		} finally {
 			for (const k of Object.keys(env)) {
-				if (prev[k] === undefined) delete process.env[k];
-				else process.env[k] = prev[k];
+				if (prev[k] === undefined) {delete process.env[k];}
+				else {process.env[k] = prev[k];}
 			}
 		}
 	};
@@ -156,3 +151,4 @@ test("GODRIVER_DIFF_OUTPUT=1 writes diff artifacts even on success", withEnv({ G
 		await rm(root, { recursive: true, force: true });
 	}
 }));
+

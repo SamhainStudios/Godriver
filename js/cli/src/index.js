@@ -14,7 +14,7 @@ export async function runCli(argv = process.argv.slice(2)) {
 	let projectPath = ".";
 	let port = parseInt(process.env.GODRIVER_PORT || "9999", 10);
 	let headless = true;
-	let cucumberArgs = [];
+	const cucumberArgs = [];
 
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
