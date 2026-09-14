@@ -74,11 +74,11 @@ func test_input_map_shape() -> void:
 		InputMap.add_action(action)
 		var key := InputEventKey.new()
 		key.physical_keycode = KEY_ENTER
-		key.device = InputEvent.DEVICE_ID_KEYBOARD
+		key.device = TestDriverCompat.device_id_keyboard()
 		InputMap.action_add_event(action, key)
 		var mouse := InputEventMouseButton.new()
 		mouse.button_index = MOUSE_BUTTON_LEFT
-		mouse.device = InputEvent.DEVICE_ID_MOUSE
+		mouse.device = TestDriverCompat.device_id_mouse()
 		InputMap.action_add_event(action, mouse)
 	var r: Dictionary = await _http_get("/input/map")
 	assert_int(r.get("code", 0)).is_equal(200)
@@ -97,12 +97,12 @@ func test_input_map_shape() -> void:
 	var key_ev: Dictionary = events[0]
 	assert_str(str(key_ev.get("type"))).is_equal("key")
 	assert_int(int(key_ev.get("physical_keycode", -1))).is_equal(KEY_ENTER)
-	assert_int(int(key_ev.get("device", -1))).is_equal(InputEvent.DEVICE_ID_KEYBOARD)
+	assert_int(int(key_ev.get("device", -1))).is_equal(TestDriverCompat.device_id_keyboard())
 	# Mouse event summary.
 	var mouse_ev: Dictionary = events[1]
 	assert_str(str(mouse_ev.get("type"))).is_equal("mouse_button")
 	assert_int(int(mouse_ev.get("button_index", -1))).is_equal(MOUSE_BUTTON_LEFT)
-	assert_int(int(mouse_ev.get("device", -1))).is_equal(InputEvent.DEVICE_ID_MOUSE)
+	assert_int(int(mouse_ev.get("device", -1))).is_equal(TestDriverCompat.device_id_mouse())
 	# Built-in actions are present too (ui_accept exists in every project).
 	var names: Array = []
 	for a in actions:
@@ -136,3 +136,4 @@ func test_state_read_and_missing_autoload() -> void:
 	assert_that(values.has("name")).is_false()
 	assert_that(values.has("position")).is_false()
 	assert_that(values.has("process_mode")).is_false()
+

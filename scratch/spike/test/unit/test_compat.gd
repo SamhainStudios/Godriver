@@ -7,18 +7,27 @@ extends GdUnitTestSuite
 
 
 func test_device_constants_on_47() -> void:
-	assert_bool(TestDriverCompat.HAS_DEVICE_IDS).is_true()
-	assert_int(TestDriverCompat.device_id_keyboard()).is_equal(16)
-	assert_int(TestDriverCompat.device_id_mouse()).is_equal(32)
-	assert_int(TestDriverCompat.device_id_emulation()).is_equal(-1)
+	# Engine-conditional: 4.7+ exposes the DEVICE_ID_* constants (16/32/-1);
+	# 4.3-4.6 fall back to 0 (the pre-4.7 convention).
+	if TestDriverCompat.HAS_DEVICE_IDS:
+		assert_int(TestDriverCompat.device_id_keyboard()).is_equal(16)
+		assert_int(TestDriverCompat.device_id_mouse()).is_equal(32)
+		assert_int(TestDriverCompat.device_id_emulation()).is_equal(-1)
+	else:
+		assert_int(TestDriverCompat.device_id_keyboard()).is_equal(0)
+		assert_int(TestDriverCompat.device_id_mouse()).is_equal(0)
+		assert_int(TestDriverCompat.device_id_emulation()).is_equal(0)
 
 
 func test_startup_settings_applied() -> void:
 	# Must not error on any engine version; on 4.7 the property exists and
 	# must end up false (synthetic joypad events processed when unfocused).
+	# NOTE: the property is read via the runtime-safe `in` operator +
+	# Object.get() with a String name - a direct member reference is a PARSE
+	# error on 4.3-4.6 (4.4 verification finding, same as the compat shim).
 	TestDriverCompat.apply_startup_settings()
 	if "ignore_joypad_on_unfocused_application" in Input:
-		assert_bool(Input.ignore_joypad_on_unfocused_application).is_false()
+		assert_bool(Input.get("ignore_joypad_on_unfocused_application")).is_false()
 
 
 func test_injected_events_carry_compat_device_ids() -> void:

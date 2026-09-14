@@ -131,7 +131,7 @@ func test_key_ui_accept_fires_focused_button_headless() -> void:
 	assert_int(res["code"]).is_equal(200)
 	var data: Dictionary = res["body"]["data"]
 	# JSON ints arrive as floats (GTD-007 gotcha).
-	assert_float(data["device"]).is_equal(16.0)
+	assert_float(data["device"]).is_equal(float(TestDriverCompat.device_id_keyboard()))
 	await _wait_frames(2)
 	assert_str(lbl.text).is_equal("pressed")
 
@@ -181,3 +181,4 @@ func test_error_codes() -> void:
 	res = await _http_post("/input/type", {"path": "/root/TypeKeyFixture", "text": "x"})
 	assert_int(res["code"]).is_equal(400)
 	assert_str(str(res["body"]["error"]["code"])).is_equal("BAD_TARGET")
+

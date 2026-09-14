@@ -81,7 +81,8 @@ func test_key_down_by_key_constant() -> void:
 	var down := await _http("POST", "/input/key_down", '{"key": "KEY_ENTER"}')
 	assert_int(down.get("code", 0)).is_equal(200)
 	var data: Dictionary = down.get("body", {}).get("data", {})
-	assert_int(int(data.get("device", -1))).is_equal(16)  # DEVICE_ID_KEYBOARD on 4.7+
+	assert_int(int(data.get("device", -1))).is_equal(TestDriverCompat.device_id_keyboard())
 	await _wait_frames(1)
 	var up := await _http("POST", "/input/key_up", '{"key": "KEY_ENTER"}')
 	assert_int(up.get("code", 0)).is_equal(200)
+
