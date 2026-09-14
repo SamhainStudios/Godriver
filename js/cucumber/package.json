@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@godriver/core": "0.3.0"
+    "@godriver/core": "0.4.0"
   },
   "peerDependencies": {
     "@cucumber/cucumber": "^10.0.0 || ^11.0.0",

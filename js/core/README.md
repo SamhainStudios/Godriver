@@ -1,8 +1,8 @@
 # @godriver/core
 
-Portable HTTP client for the [Godot Test Driver](../../README.md) addon — the
+Portable HTTP client for the [Godriver](../../README.md) addon - the
 contract layer every language port reimplements. Zero runner dependencies,
-ES modules, Node 18+ (built-in fetch).
+ES modules, Node 24+ (built-in fetch).
 
 ## Install
 

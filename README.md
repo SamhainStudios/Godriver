@@ -13,6 +13,11 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 * Resilient Target Resolution: Target nodes by scene tree path or metadata-based `test_id` (`driver.click("test_id:btn_submit")`).
 * Input Injection: Click `Control` nodes or `Area2D` hotspots, type text into `LineEdit` controls, and dispatch `InputMap` actions under `--headless`.
 * Determinism Controls: Seed global RNG (`/dev/seed`), control `Engine.time_scale`, and pause physics or processing while keeping HTTP inspection active.
+* State Seeding: Write any node property (`driver.setProperty`) to arrange a specific game state - teleport the player, set counters, update labels - without replaying the flow.
+* Held-Key Testing: `keyDown`/`keyUp` split endpoints make held key state (`is_action_pressed`) observable across frames.
+* Responsive Testing: `driver.resize(w, h)` changes the root window at runtime; assert layout and capture per-resolution baselines.
+* Visual Regression: `driver.screenshot()` + `@godriver/visual` (pixelmatch diffing, baselines, HTML diff reports).
+* Screen Object Generator: `godriver generate` scans the live scene tree and emits a typed Screen Objects module from every `test_id` node.
 * Fail-Fast Watchdog: `@godriver/cli` monitors engine health during test execution and dumps `stderr` logs on engine stalls or crashes.
 
 ---
@@ -25,6 +30,7 @@ Godriver combines a lightweight, thread-safe GDScript HTTP addon with a suite of
 | `@godriver/core` | Zero-dependency Node 24+ HTTP client | [`js/core`](js/core) |
 | `@godriver/cucumber` | BDD `GodotWorld`, lifecycle hooks, and step library | [`js/cucumber`](js/cucumber) |
 | `@godriver/cli` | Engine process launcher & fail-fast watchdog runner | [`js/cli`](js/cli) |
+| `@godriver/visual` | Pixelmatch comparator + baseline workflow (`assertMatchesBaseline`) | [`js/visual`](js/visual) |
 
 ---
 

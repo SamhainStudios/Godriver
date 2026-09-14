@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@godriver/core": "0.3.0",
+    "@godriver/core": "0.4.0",
     "@godriver/cucumber": "0.1.0"
   },
   "license": "MIT",
