@@ -171,3 +171,6 @@ ROADMAP.md
 # Godriver visual-regression artifacts (baselines are git-tracked, artifacts are not)
 artifacts/
 
+# MkDocs build output
+site/
+
